@@ -1,0 +1,90 @@
+# Workflow Status Template
+
+# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
+# Implementation phase is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2026-01-22T10:49:31Z"
+project: "kapok"
+project_type: "Backend-as-a-Service Multi-Tenant avec isolation par base de données"
+selected_track: "enterprise"
+field_type: "greenfield"
+workflow_path: "_bmad/bmm/workflows/workflow-status/paths/enterprise-greenfield.yaml"
+workflow_status:
+  # Phase 1: Analysis (Optional - Discovery Workflows)
+  brainstorm-project:
+    status: "/home/superz/kapok/_bmad-output/analysis/brainstorming-session-2026-01-22.md"
+    agent: "analyst"
+    command: "/bmad:bmm:workflows:brainstorming"
+    description: "Creative exploration and ideation"
+    completed: "2026-01-22T14:25:31Z"
+
+  research:
+    status: "skipped"
+    agent: "analyst"
+    command: "/bmad:bmm:workflows:research"
+    description: "Technical/competitive analysis"
+    note: "Skipped - proceeding to PRD with brainstorming insights"
+
+  product-brief:
+    status: "skipped"
+    note: "Not selected by user"
+
+  # Phase 2: Planning (Required)
+  prd:
+    status: "required"
+    agent: "pm"
+    command: "/bmad:bmm:workflows:prd"
+    description: "Product Requirements Document with FRs and NFRs"
+
+  create-ux-design:
+    status: "conditional"
+    agent: "ux-designer"
+    command: "/bmad:bmm:workflows:create-ux-design"
+    description: "UX Design (determined after PRD if UI needed)"
+    note: "For CLI design and potential admin interfaces"
+
+  # Phase 3: Solutioning (Required)
+  create-architecture:
+    status: "required"
+    agent: "architect"
+    command: "/bmad:bmm:workflows:create-architecture"
+    description: "System architecture document"
+    note: "Critical for multi-tenant, microservices, and database isolation strategy"
+
+  create-epics-and-stories:
+    status: "required"
+    agent: "pm"
+    command: "/bmad:bmm:workflows:create-epics-and-stories"
+    description: "Break down PRD into implementable epics and stories"
+
+  test-design:
+    status: "optional"
+    agent: "tea"
+    command: "/bmad:bmm:workflows:testarch-test-design"
+    description: "System-level testability review"
+    note: "Recommended for enterprise projects with integration/e2e testing needs"
+
+  implementation-readiness:
+    status: "required"
+    agent: "architect"
+    command: "/bmad:bmm:workflows:check-implementation-readiness"
+    description: "Validates PRD + Architecture + Epics completeness before implementation"
+
+  # Phase 4: Implementation (Required)
+  sprint-planning:
+    status: "required"
+    agent: "sm"
+    command: "/bmad:bmm:workflows:sprint-planning"
+    description: "Initialize sprint tracking - subsequent work tracked in sprint-status.yaml"

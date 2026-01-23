@@ -1,0 +1,42 @@
+# Binaries
+/bin/
+/dist/
+cmd/*/kapok
+cmd/*/control-plane
+cmd/*/graphql-engine
+cmd/*/provisioner
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+*.out
+coverage.html
+*.test
+
+# Temporary files
+*.tmp
+*.bak
+
+# Go workspace file
+go.work
+
+# Dependencies
+vendor/

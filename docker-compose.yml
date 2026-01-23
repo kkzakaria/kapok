@@ -1,0 +1,116 @@
+version: '3.8'
+
+name: kapok
+
+services:
+  # ==========================================================================
+  # PostgreSQL - Control Plane Database
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: kapok-postgres
+    environment:
+      POSTGRES_USER: kapok
+      POSTGRES_PASSWORD: kapok_secret
+      POSTGRES_DB: kapok_control
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/control-plane:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kapok -d kapok_control"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kapok-network
+
+  # ==========================================================================
+  # Redis - Cache & Sessions
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: kapok-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kapok-network
+
+  # ==========================================================================
+  # MinIO - S3-Compatible Storage
+  # ==========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: kapok-minio
+    environment:
+      MINIO_ROOT_USER: kapok_access
+      MINIO_ROOT_PASSWORD: kapok_secret_key
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - kapok-network
+
+  # ==========================================================================
+  # Mailhog - Email Testing (Development only)
+  # ==========================================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: kapok-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    networks:
+      - kapok-network
+
+  # ==========================================================================
+  # Kapok Gateway (uncomment when ready)
+  # ==========================================================================
+  # gateway:
+  #   build:
+  #     context: .
+  #     dockerfile: deployments/docker/Dockerfile
+  #   container_name: kapok-gateway
+  #   environment:
+  #     - CONFIG_PATH=/app/config.yaml
+  #     - DB_PASSWORD=kapok_secret
+  #     - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+  #     - MINIO_ACCESS_KEY=kapok_access
+  #     - MINIO_SECRET_KEY=kapok_secret_key
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./config.yaml:/app/config.yaml:ro
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - kapok-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  kapok-network:
+    driver: bridge
