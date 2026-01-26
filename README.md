@@ -44,6 +44,104 @@ kapok dev
 kapok deploy
 ```
 
+## Configuration
+
+Kapok uses a flexible configuration system with multiple sources.
+
+### Configuration Precedence (Highest to Lowest)
+
+1. **CLI flags** - Command-line arguments (e.g., `--port=9090`)
+2. **Environment variables** - Prefixed with `KAPOK_` (e.g.,
+   `KAPOK_SERVER_PORT=9090`)
+3. **Config files** - Searched in order:
+   - `./kapok.yaml` (current directory)
+   - `~/.kapok/config.yaml` (user home)
+   - `/etc/kapok/config.yaml` (system-wide)
+4. **Defaults** - Smart defaults for development
+
+### Quick Start Configuration
+
+```bash
+# 1. Copy example config
+cp kapok.yaml.example kapok.yaml
+
+# 2. Set required secrets via environment variables
+export KAPOK_DATABASE_PASSWORD="your-secure-password"
+export KAPOK_JWT_SECRET="your-jwt-secret-min-32-characters"
+
+# 3. (Optional) Customize kapok.yaml for your needs
+nano kapok.yaml
+
+# 4. Run Kapok
+kapok dev
+```
+
+### Environment Variables
+
+All configuration can be set via environment variables using the `KAPOK_`
+prefix:
+
+```bash
+# Server configuration
+export KAPOK_SERVER_HOST="0.0.0.0"
+export KAPOK_SERVER_PORT="8080"
+
+# Database configuration
+export KAPOK_DATABASE_HOST="localhost"
+export KAPOK_DATABASE_PORT="5432"
+export KAPOK_DATABASE_USER="kapok"
+export KAPOK_DATABASE_PASSWORD="secure-password"  # Required!
+export KAPOK_DATABASE_DATABASE="kapok"
+
+# Redis configuration
+export KAPOK_REDIS_HOST="localhost"
+export KAPOK_REDIS_PORT="6379"
+export KAPOK_REDIS_PASSWORD="redis-password"      # If required
+
+# JWT configuration
+export KAPOK_JWT_SECRET="min-32-chars-secret"     # Required!
+export KAPOK_JWT_ACCESS_TOKEN_TTL="15m"
+export KAPOK_JWT_REFRESH_TOKEN_TTL="168h"
+
+# Logging
+export KAPOK_LOG_LEVEL="info"  # debug, info, warn, error
+export KAPOK_LOG_FORMAT="json" # json, console
+```
+
+**Note:** Nested config keys use underscores: `database.host` →
+`KAPOK_DATABASE_HOST`
+
+### Security
+
+**⚠️ CRITICAL: Never commit secrets to config files!**
+
+Sensitive values (passwords, tokens, secrets) **MUST** be set via environment
+variables:
+
+- `KAPOK_DATABASE_PASSWORD` - Database password
+- `KAPOK_JWT_SECRET` - JWT signing secret (minimum 32 characters)
+- `KAPOK_REDIS_PASSWORD` - Redis password (if authentication enabled)
+
+### Example Config File
+
+See `kapok.yaml.example` for a fully documented configuration template.
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "kapok"
+  # password: set via KAPOK_DATABASE_PASSWORD
+
+log:
+  level: "info"
+  format: "json"
+```
+
 ## Architecture
 
 Voir la documentation complète d'architecture :
