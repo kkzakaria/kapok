@@ -14,10 +14,11 @@ import (
 func TestInitCommandFull(t *testing.T) {
 	// Create temp directory for test
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// Execute init command
@@ -61,10 +62,12 @@ func TestInitCommandFull(t *testing.T) {
 
 func TestInitCommandDefaultName(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -78,10 +81,12 @@ func TestInitCommandDefaultName(t *testing.T) {
 
 func TestInitCommandNonEmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// Create a file to make directory non-empty
@@ -98,10 +103,12 @@ func TestInitCommandNonEmptyDirectory(t *testing.T) {
 
 func TestInitCommandForceFlag(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// Create existing file
@@ -120,10 +127,12 @@ func TestInitCommandForceFlag(t *testing.T) {
 
 func TestInitCommandOverwriteWithForce(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// First init
@@ -148,10 +157,12 @@ func TestInitCommandOverwriteWithForce(t *testing.T) {
 
 func TestInitCommandHiddenFilesIgnored(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// Create hidden files (like .git directory)
@@ -170,10 +181,12 @@ func TestInitCommandHiddenFilesIgnored(t *testing.T) {
 
 func TestInitCommandPerformance(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	// Measure execution time
@@ -188,10 +201,12 @@ func TestInitCommandPerformance(t *testing.T) {
 
 func TestInitCommandFileContentsCorrect(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Chdir(originalWd) })
+	
 
-	err := os.Chdir(tmpDir)
+	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
 
 	var buf bytes.Buffer

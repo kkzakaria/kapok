@@ -40,3 +40,9 @@ go.work
 
 # Dependencies
 vendor/
+
+# Test artifacts from init_test.go
+cmd/kapok/cmd/kapok.yaml
+cmd/kapok/cmd/.env.example
+cmd/kapok/cmd/README.md
+cmd/kapok/cmd/docs/
