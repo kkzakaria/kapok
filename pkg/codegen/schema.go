@@ -3,6 +3,8 @@ package codegen
 import (
 	"database/sql"
 	"fmt"
+	
+	"github.com/rs/zerolog/log"
 )
 
 // Schema represents the complete database schema
@@ -33,6 +35,9 @@ type PrimaryKey struct {
 }
 
 // SchemaIntrospector queries PostgreSQL information_schema
+// Note: The current SDK generator has limited support for composite primary keys.
+// Tables with composite PKs will trigger a warning, and SDK generation may not work correctly.
+// Consider using a single-column primary key (e.g., surrogate key) for best results.
 type SchemaIntrospector struct {
 	db *sql.DB
 }
@@ -68,9 +73,20 @@ func (s *SchemaIntrospector) IntrospectSchema(schemaName string) (*Schema, error
 
 		pk, err := s.getPrimaryKey(schemaName, table.Name)
 		if err != nil {
-			// Primary key is optional, just log
-			// In production, you might want to use logger here
+			log.Debug().
+				Str("table", table.Name).
+				Err(err).
+				Msg("Failed to retrieve primary key, table will have no PK defined")
 		}
+		
+		// Warn about composite primary keys (not fully supported yet)
+		if pk != nil && len(pk.ColumnNames) > 1 {
+			log.Warn().
+				Str("table", table.Name).
+				Strs("pk_columns", pk.ColumnNames).
+				Msg("Composite primary key detected - SDK generation may not work correctly")
+		}
+		
 		table.PrimaryKey = pk
 
 		schema.Tables = append(schema.Tables, table)

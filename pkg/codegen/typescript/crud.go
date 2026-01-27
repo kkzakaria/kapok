@@ -35,7 +35,8 @@ func (g *CRUDGenerator) GenerateCreateFunction(table *codegen.Table) string {
 	sb.WriteString("    body: JSON.stringify(input),\n")
 	sb.WriteString("  });\n")
 	sb.WriteString("  if (!response.ok) {\n")
-	sb.WriteString("    throw new Error(`Failed to create: ${response.statusText}`);\n")
+	sb.WriteString("    const error = await response.json().catch(() => ({ message: response.statusText }));\n")
+	sb.WriteString("    throw new Error(error.message || `Failed to create: ${response.statusText}`);\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("  return response.json();\n")
 	sb.WriteString("}\n")
@@ -51,23 +52,15 @@ func (g *CRUDGenerator) GenerateGetByIdFunction(table *codegen.Table) string {
 	functionName := fmt.Sprintf("get%sById", typeName)
 
 	// Determine primary key type
-	pkType := "number" // default
-	if table.PrimaryKey != nil && len(table.PrimaryKey.ColumnNames) > 0 {
-		pkColName := table.PrimaryKey.ColumnNames[0]
-		for _, col := range table.Columns {
-			if col.Name == pkColName {
-				pkType = g.typeMapper.mapBaseType(col.DataType)
-				break
-			}
-		}
-	}
+	pkType := g.getPrimaryKeyTSType(table)
 
 	sb.WriteString(fmt.Sprintf("export async function %s(", functionName))
 	sb.WriteString(fmt.Sprintf("baseUrl: string, id: %s", pkType))
 	sb.WriteString(fmt.Sprintf("): Promise<%s> {\n", typeName))
 	sb.WriteString(fmt.Sprintf("  const response = await fetch(`${baseUrl}/%s/${id}`);\n", table.Name))
 	sb.WriteString("  if (!response.ok) {\n")
-	sb.WriteString("    throw new Error(`Failed to fetch: ${response.statusText}`);\n")
+	sb.WriteString("    const error = await response.json().catch(() => ({ message: response.statusText }));\n")
+	sb.WriteString("    throw new Error(error.message || `Failed to fetch: ${response.statusText}`);\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("  return response.json();\n")
 	sb.WriteString("}\n")
@@ -96,7 +89,8 @@ func (g *CRUDGenerator) GenerateListFunction(table *codegen.Table) string {
 	sb.WriteString("  }\n")
 	sb.WriteString("  const response = await fetch(url);\n")
 	sb.WriteString("  if (!response.ok) {\n")
-	sb.WriteString("    throw new Error(`Failed to fetch list: ${response.statusText}`);\n")
+	sb.WriteString("    const error = await response.json().catch(() => ({ message: response.statusText }));\n")
+	sb.WriteString("    throw new Error(error.message || `Failed to fetch list: ${response.statusText}`);\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("  return response.json();\n")
 	sb.WriteString("}\n")
@@ -112,16 +106,7 @@ func (g *CRUDGenerator) GenerateUpdateFunction(table *codegen.Table) string {
 	functionName := fmt.Sprintf("update%s", typeName)
 
 	// Determine primary key type
-	pkType := "number"
-	if table.PrimaryKey != nil && len(table.PrimaryKey.ColumnNames) > 0 {
-		pkColName := table.PrimaryKey.ColumnNames[0]
-		for _, col := range table.Columns {
-			if col.Name == pkColName {
-				pkType = g.typeMapper.mapBaseType(col.DataType)
-				break
-			}
-		}
-	}
+	pkType := g.getPrimaryKeyTSType(table)
 
 	sb.WriteString(fmt.Sprintf("export async function %s(", functionName))
 	sb.WriteString(fmt.Sprintf("baseUrl: string, id: %s, input: Update%sInput", pkType, typeName))
@@ -132,7 +117,8 @@ func (g *CRUDGenerator) GenerateUpdateFunction(table *codegen.Table) string {
 	sb.WriteString("    body: JSON.stringify(input),\n")
 	sb.WriteString("  });\n")
 	sb.WriteString("  if (!response.ok) {\n")
-	sb.WriteString("    throw new Error(`Failed to update: ${response.statusText}`);\n")
+	sb.WriteString("    const error = await response.json().catch(() => ({ message: response.statusText }));\n")
+	sb.WriteString("    throw new Error(error.message || `Failed to update: ${response.statusText}`);\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("  return response.json();\n")
 	sb.WriteString("}\n")
@@ -148,16 +134,7 @@ func (g *CRUDGenerator) GenerateDeleteFunction(table *codegen.Table) string {
 	functionName := fmt.Sprintf("delete%s", typeName)
 
 	// Determine primary key type
-	pkType := "number"
-	if table.PrimaryKey != nil && len(table.PrimaryKey.ColumnNames) > 0 {
-		pkColName := table.PrimaryKey.ColumnNames[0]
-		for _, col := range table.Columns {
-			if col.Name == pkColName {
-				pkType = g.typeMapper.mapBaseType(col.DataType)
-				break
-			}
-		}
-	}
+	pkType := g.getPrimaryKeyTSType(table)
 
 	sb.WriteString(fmt.Sprintf("export async function %s(", functionName))
 	sb.WriteString(fmt.Sprintf("baseUrl: string, id: %s", pkType))
@@ -166,11 +143,28 @@ func (g *CRUDGenerator) GenerateDeleteFunction(table *codegen.Table) string {
 	sb.WriteString("    method: 'DELETE',\n")
 	sb.WriteString("  });\n")
 	sb.WriteString("  if (!response.ok) {\n")
-	sb.WriteString("    throw new Error(`Failed to delete: ${response.statusText}`);\n")
+	sb.WriteString("    const error = await response.json().catch(() => ({ message: response.statusText }));\n")
+	sb.WriteString("    throw new Error(error.message || `Failed to delete: ${response.statusText}`);\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("}\n")
 
 	return sb.String()
+}
+
+// getPrimaryKeyTSType returns the TypeScript type for the table's primary key
+// Returns "string" for UUID/TEXT types, "number" for integer types
+func (g *CRUDGenerator) getPrimaryKeyTSType(table *codegen.Table) string {
+	if table.PrimaryKey == nil || len(table.PrimaryKey.ColumnNames) == 0 {
+		return "number" // default fallback
+	}
+	
+	pkColName := table.PrimaryKey.ColumnNames[0]
+	for _, col := range table.Columns {
+		if col.Name == pkColName {
+			return g.typeMapper.mapBaseType(col.DataType)
+		}
+	}
+	return "number" // fallback if PK column not found
 }
 
 // GenerateAllCRUD generates all CRUD functions for a table

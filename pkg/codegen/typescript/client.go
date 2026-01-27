@@ -87,16 +87,9 @@ func (g *ClientGenerator) GenerateClient(schema *codegen.Schema) string {
 			typeName, typeName))
 		
 		// Get primary key type for getById and other methods
-		pkType := "number"
-		if table.PrimaryKey != nil && len(table.PrimaryKey.ColumnNames) > 0 {
-			pkColName := table.PrimaryKey.ColumnNames[0]
-			for _, col := range table.Columns {
-				if col.Name == pkColName {
-					pkType = g.typeMapper.mapBaseType(col.DataType)
-					break
-				}
-			}
-		}
+		// Determine primary key type for method signatures
+		crudGen := NewCRUDGenerator()
+		pkType := crudGen.getPrimaryKeyTSType(table)
 		
 		sb.WriteString(fmt.Sprintf("    getById: (id: %s) => get%sById(this.baseUrl, id),\n", 
 			pkType, typeName))
