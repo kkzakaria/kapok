@@ -1,6 +1,7 @@
 # Kapok
 
-Backend-as-a-Service auto-hébergé avec multi-tenancy native.
+Backend-as-a-Service auto-hébergé avec multi-tenancy native et génération
+automatique de SDKs.
 
 ## Overview
 
@@ -8,41 +9,145 @@ Kapok est une plateforme Backend-as-a-Service (BaaS) auto-hébergée conçue pou
 les développeurs frontend qui ont besoin de contrôle total sur leur
 infrastructure sans expertise DevOps.
 
-### Features Clés (MVP)
+### Features Clés
 
 - **Multi-Tenant Foundation**: Schema-per-tenant isolation dans PostgreSQL
-- **GraphQL Auto-Generated**: API GraphQL générée automatiquement depuis votre
-  schéma PostgreSQL
-- **CLI Developer-Friendly**: `kapok init`, `kapok dev`, `kapok deploy`,
-  `kapok tenant`
+- **Auto-Generated SDKs**: SDKs TypeScript et React hooks générés
+  automatiquement
+- **Type-Safe API Client**: Client TypeScript avec autocomplétion complète
+- **React Query Integration**: Hooks React avec caching intégré
+- **CLI Developer-Friendly**: `kapok init`, `kapok dev`, `kapok generate`
 - **Kubernetes Deployment**: Déploiement one-command sur AWS EKS, GCP GKE, Azure
   AKS
 - **Zero-Config**: Configuration minimale, smart defaults pour 90% des use cases
 
-## Quick Start
+## 🚀 Quick Start
 
-_Documentation complète à venir - voir `_bmad-output/planning-artifacts/` pour
-PRD et Architecture_
+**Get a working backend with auto-generated SDKs in under 5 minutes!**
 
 ### Installation
 
 ```bash
-# Coming soon
 go install github.com/kapok/kapok/cmd/kapok@latest
 ```
 
-### Usage
+### Create Your First Project
 
 ```bash
-# Initialize new project
-kapok init my-backend
+# Initialize project
+kapok init my-blog
+cd my-blog
 
-# Start local development
+# Start development server
 kapok dev
-
-#Deploy to Kubernetes
-kapok deploy
 ```
+
+### Generate SDKs
+
+```bash
+# Generate TypeScript SDK
+kapok generate sdk --schema public
+
+# Generate React hooks
+kapok generate react
+```
+
+### Use in Your App
+
+```typescript
+import { KapokProvider, useListPosts } from "kapok-react";
+
+function BlogPosts() {
+  const { data: posts, isLoading } = useListPosts();
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      {posts.map((post) => (
+        <article key={post.id}>
+          <h2>{post.title}</h2>
+        </article>
+      ))}
+    </div>
+  );
+}
+```
+
+**📖 Complete Guide**: See [docs/quickstart.md](./docs/quickstart.md) for the
+full tutorial.
+
+**📦 Examples**: Check [examples/quickstart/](./examples/quickstart/) for
+working code samples.
+
+---
+
+## SDK Generation
+
+Kapok automatically generates type-safe SDKs from your PostgreSQL schema.
+
+### TypeScript SDK
+
+```bash
+kapok generate sdk --schema public --project-name my-app-sdk
+```
+
+**Generates**:
+
+- TypeScript interfaces for all tables
+- CRUD functions (`create`, `list`, `getById`, `update`, `delete`)
+- Type-safe `KapokClient` class
+- Full autocomplete support
+
+**Usage**:
+
+```typescript
+import { KapokClient } from "my-app-sdk";
+
+const client = new KapokClient("http://localhost:8080/api");
+const posts = await client.posts.list({ limit: 10 });
+```
+
+### React Hooks
+
+```bash
+kapok generate react --sdk-import ../typescript
+```
+
+**Generates**:
+
+- Query hooks: `useListXxx`, `useXxxById`
+- Mutation hooks: `useCreateXxx`, `useUpdateXxx`, `useDeleteXxx`
+- React Query integration with automatic caching
+- `KapokProvider` context component
+
+**Usage**:
+
+```typescript
+import { useCreatePosts, useListPosts } from "my-app-react";
+
+function MyComponent() {
+  const { data, isLoading } = useListPosts();
+  const createPost = useCreatePosts();
+
+  // Your component logic
+}
+```
+
+---
+
+## CLI Commands
+
+```bash
+kapok init <project>    # Initialize new project
+kapok dev               # Start development server
+kapok generate sdk      # Generate TypeScript SDK
+kapok generate react    # Generate React hooks
+kapok deploy            # Deploy to Kubernetes (coming soon)
+kapok tenant            # Manage tenants (coming soon)
+```
+
+---
 
 ## Configuration
 
@@ -142,13 +247,26 @@ log:
   format: "json"
 ```
 
+---
+
+## Documentation
+
+- **[Quick Start Guide](./docs/quickstart.md)** - Get started in 5 minutes
+- **[Installation Guide](./docs/installation.md)** - Platform-specific
+  installation
+- **[Architecture](./bmad-output/planning-artifacts/architecture.md)** - System
+  design
+- **[Product Requirements](./bmad-output/planning-artifacts/prd.md)** - Feature
+  specifications
+- **[Epics & Stories](./bmad-output/planning-artifacts/epics.md)** - Development
+  roadmap
+
+---
+
 ## Architecture
 
-Voir la documentation complète d'architecture :
-
-- [Architecture Decision Document](./_bmad-output/planning-artifacts/architecture.md)
-- [Product Requirements Document](./_bmad-output/planning-artifacts/prd.md)
-- [Epics & Stories](./_bmad-output/planning-artifacts/epics.md)
+Voir la documentation complète d'architecture dans
+`_bmad-output/planning-artifacts/`.
 
 ## Project Structure
 
@@ -168,45 +286,69 @@ kapok/
 │   └── k8s/                # Kubernetes client wrappers
 ├── pkg/                    # Exported libraries
 │   ├── api/                # Shared API types
-│   └── config/             # Configuration structs
+│   ├── config/             # Configuration structs
+│   └── codegen/            # SDK generation
+│       ├── typescript/     # TypeScript SDK generator
+│       └── react/          # React hooks generator
+├── docs/                   # Documentation
+│   ├── quickstart.md       # Quick start guide
+│   └── installation.md     # Installation guide
+├── examples/               # Example projects
+│   └── quickstart/         # Quick start example
 ├── deployments/            # Deployment configurations
 │   └── helm/               # Helm charts
 ├── testdata/               # Test fixtures
 └── scripts/                # Build and deployment scripts
 ```
 
+---
+
 ## Development
 
 ### Prerequisites
 
 - Go 1.21+
-- Docker (for local development)
-- Kubernetes cluster (for deployment)
+- PostgreSQL 12+
+- Node.js 18+ (for SDK generation)
+- Docker (optional, for local development)
+- Kubernetes cluster (optional, for deployment)
 
 ### Building
 
 ```bash
-# Coming soon
-make build
+go build -o kapok ./cmd/kapok
 ```
 
 ### Testing
 
 ```bash
-# Coming soon
-make test
+go test ./...
 ```
+
+### Running Tests with Coverage
+
+```bash
+go test ./... -cover
+```
+
+---
 
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines (coming
 soon).
 
+---
+
 ## License
 
 _To be determined_
 
+---
+
 ## Contact
 
 - GitHub: https://github.com/kapok/kapok
-- Documentation: _Coming soon_
+- Documentation: [docs/](./docs/)
+- Issues: https://github.com/kapok/kapok/issues
+- Discussions: https://github.com/kapok/kapok/discussions
