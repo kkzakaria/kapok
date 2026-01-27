@@ -86,10 +86,8 @@ func (g *ClientGenerator) GenerateClient(schema *codegen.Schema) string {
 		sb.WriteString(fmt.Sprintf("    create: (input: Create%sInput) => create%s(this.baseUrl, input),\n", 
 			typeName, typeName))
 		
-		// Get primary key type for getById and other methods
 		// Determine primary key type for method signatures
-		crudGen := NewCRUDGenerator()
-		pkType := crudGen.getPrimaryKeyTSType(table)
+		pkType := g.crudGenerator.getPrimaryKeyTSType(table)
 		
 		sb.WriteString(fmt.Sprintf("    getById: (id: %s) => get%sById(this.baseUrl, id),\n", 
 			pkType, typeName))
