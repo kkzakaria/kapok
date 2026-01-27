@@ -60,8 +60,11 @@ func ValidateName(name string) error {
 }
 
 // GenerateSchemaName creates a PostgreSQL schema name from tenant ID
+// PostgreSQL identifiers cannot contain hyphens, so we replace them with underscores
 func GenerateSchemaName(tenantID string) string {
-	return fmt.Sprintf("tenant_%s", tenantID)
+	// Replace hyphens from UUID with underscores for PostgreSQL compatibility
+	sanitized := regexp.MustCompile(`-`).ReplaceAllString(tenantID, "_")
+	return fmt.Sprintf("tenant_%s", sanitized)
 }
 
 // Validate validates the tenant struct

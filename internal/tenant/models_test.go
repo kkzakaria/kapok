@@ -79,12 +79,12 @@ func TestGenerateSchemaName(t *testing.T) {
 		{
 			name:     "basic UUID",
 			tenantID: "123e4567-e89b-12d3-a456-426614174000",
-			expected: "tenant_123e4567-e89b-12d3-a456-426614174000",
+			expected: "tenant_123e4567_e89b_12d3_a456_426614174000",
 		},
 		{
 			name:     "simple ID",
 			tenantID: "tenant-123",
-			expected: "tenant_tenant-123",
+			expected: "tenant_tenant_123",
 		},
 	}
 
@@ -108,7 +108,7 @@ func TestTenant_Validate(t *testing.T) {
 			tenant: Tenant{
 				ID:         "123e4567-e89b-12d3-a456-426614174000",
 				Name:       "acme-corp",
-				SchemaName: "tenant_123e4567-e89b-12d3-a456-426614174000",
+				SchemaName: "tenant_123e4567_e89b_12d3_a456_426614174000",
 				Status:     StatusActive,
 			},
 			wantError: false,
