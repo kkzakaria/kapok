@@ -46,3 +46,6 @@ cmd/kapok/cmd/kapok.yaml
 cmd/kapok/cmd/.env.example
 cmd/kapok/cmd/README.md
 cmd/kapok/cmd/docs/
+
+# AgentVibes TTS auto-generated files
+.claude/github-star-reminder.txt
