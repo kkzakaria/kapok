@@ -101,7 +101,56 @@ func TestDeployCommand(t *testing.T) {
 	}
 }
 
-func TestTenantCommands(t *testing.T) {
+func TestTenantCommands_Help(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantOut string
+	}{
+		{
+			name:    "tenant help",
+			args:    []string{"tenant", "--help"},
+			wantOut: "tenant",
+		},
+		{
+			name:    "tenant create help",
+			args:    []string{"tenant", "create", "--help"},
+			wantOut: "create",
+		},
+		{
+			name:    "tenant list help",
+			args:    []string{"tenant", "list", "--help"},
+			wantOut: "list",
+		},
+		{
+			name:    "tenant delete help",
+			args:    []string{"tenant", "delete", "--help"},
+			wantOut: "delete",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			err := cmd.ExecuteContext(buf, tt.args)
+
+			if err != nil {
+				t.Fatalf("%s failed: %v", tt.name, err)
+			}
+
+			got := buf.String()
+			if !strings.Contains(got, tt.wantOut) {
+				t.Errorf("Expected output to contain '%s', got: %v", tt.wantOut, got)
+			}
+		})
+	}
+}
+
+func TestTenantCommands_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping tenant integration tests - requires database")
+	}
+
 	tests := []struct {
 		name    string
 		args    []string
@@ -109,8 +158,8 @@ func TestTenantCommands(t *testing.T) {
 	}{
 		{
 			name:    "tenant create",
-			args:   []string{"tenant", "create", "--name=test"},
-			wantOut: "Creating tenant: test",
+			args:    []string{"tenant", "create", "test"},
+			wantOut: "Tenant created successfully",
 		},
 		{
 			name:    "tenant list",
@@ -119,8 +168,8 @@ func TestTenantCommands(t *testing.T) {
 		},
 		{
 			name:    "tenant delete",
-			args:    []string{"tenant", "delete", "tenant_123"},
-			wantOut: "Deleting tenant: tenant_123",
+			args:    []string{"tenant", "delete", "--force", "tenant_123"},
+			wantOut: "deleted",
 		},
 	}
 
