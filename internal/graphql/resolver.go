@@ -290,6 +290,111 @@ func (r *Resolver) ResolveDelete(schemaName, tableName, pkName string) graphql.F
 	}
 }
 
+// ResolveRelation returns a function that resolves a belongsTo relation (FK -> parent)
+// Example: post.author where post has author_id FK pointing to users.id
+func (r *Resolver) ResolveRelation(schemaName, foreignTable, foreignColumn, localColumn string) graphql.FieldResolveFn {
+	return func(p graphql.ResolveParams) (interface{}, error) {
+		// Validate identifiers
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(foreignTable); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+		if err := validateIdentifier(foreignColumn); err != nil {
+			return nil, fmt.Errorf("invalid column name")
+		}
+
+		// Get the FK value from the parent object
+		source, ok := p.Source.(map[string]interface{})
+		if !ok {
+			return nil, nil
+		}
+
+		// Get the local column value (e.g., authorId from post)
+		localColCamel := strcase.ToLowerCamel(localColumn)
+		fkValue, ok := source[localColCamel]
+		if !ok || fkValue == nil {
+			return nil, nil
+		}
+
+		query := fmt.Sprintf(`SELECT * FROM "%s"."%s" WHERE "%s" = $1 LIMIT 1`,
+			schemaName, foreignTable, foreignColumn)
+
+		rows, err := r.db.QueryContext(p.Context, query, fkValue)
+		if err != nil {
+			return nil, fmt.Errorf("relation query failed")
+		}
+		defer rows.Close()
+
+		results, err := r.scanRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read relation results")
+		}
+
+		if len(results) == 0 {
+			return nil, nil
+		}
+		return results[0], nil
+	}
+}
+
+// ResolveHasMany returns a function that resolves a hasMany relation (parent -> children)
+// Example: user.posts where posts have user_id FK pointing to users.id
+func (r *Resolver) ResolveHasMany(schemaName, childTable, childColumn, parentColumn string) graphql.FieldResolveFn {
+	return func(p graphql.ResolveParams) (interface{}, error) {
+		// Validate identifiers
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(childTable); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+		if err := validateIdentifier(childColumn); err != nil {
+			return nil, fmt.Errorf("invalid column name")
+		}
+
+		// Get the parent's PK value
+		source, ok := p.Source.(map[string]interface{})
+		if !ok {
+			return nil, nil
+		}
+
+		// Get the parent column value (e.g., id from user)
+		parentColCamel := strcase.ToLowerCamel(parentColumn)
+		pkValue, ok := source[parentColCamel]
+		if !ok || pkValue == nil {
+			return nil, nil
+		}
+
+		// Apply limit with defaults
+		limit, _ := p.Args["limit"].(int)
+		offset, _ := p.Args["offset"].(int)
+
+		if limit <= 0 {
+			limit = DefaultLimit
+		}
+		if limit > MaxLimit {
+			limit = MaxLimit
+		}
+
+		query := fmt.Sprintf(`SELECT * FROM "%s"."%s" WHERE "%s" = $1 LIMIT %d`,
+			schemaName, childTable, childColumn, limit)
+
+		if offset > 0 {
+			query += fmt.Sprintf(" OFFSET %d", offset)
+		}
+
+		rows, err := r.db.QueryContext(p.Context, query, pkValue)
+		if err != nil {
+			return nil, fmt.Errorf("has many query failed")
+		}
+		defer rows.Close()
+
+		return r.scanRows(rows)
+	}
+}
+
 // helper to scan rows into map[string]interface{}
 func (r *Resolver) scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 	colNames, err := rows.Columns()

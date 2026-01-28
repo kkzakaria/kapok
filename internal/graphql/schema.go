@@ -22,6 +22,12 @@ func (g *SchemaGenerator) Generate(tenantSchema string, metadata *SchemaMetadata
 	// 1. Create GraphQL Objects for each table
 	types := make(map[string]*graphql.Object)
 
+	// Build a map of table name -> Table for quick lookup
+	tableMap := make(map[string]Table)
+	for _, table := range metadata.Tables {
+		tableMap[table.Name] = table
+	}
+
 	for _, table := range metadata.Tables {
 		table := table // capture loop variable
 		typeName := strcase.ToCamel(table.Name)
@@ -30,7 +36,7 @@ func (g *SchemaGenerator) Generate(tenantSchema string, metadata *SchemaMetadata
 			Name: typeName,
 			Fields: (graphql.FieldsThunk)(func() graphql.Fields {
 				fields := graphql.Fields{}
-				
+
 				// Add columns as fields
 				for _, col := range table.Columns {
 					fieldName := strcase.ToLowerCamel(col.Name)
@@ -42,9 +48,57 @@ func (g *SchemaGenerator) Generate(tenantSchema string, metadata *SchemaMetadata
 					fields[fieldName] = &graphql.Field{
 						Type: gqlType,
 					}
+
+					// Add FK relation field (e.g., author for author_id)
+					if col.IsFK && col.FKTable != "" {
+						relatedType, exists := types[col.FKTable]
+						if exists {
+							// Remove _id suffix for relation field name
+							relationFieldName := strings.TrimSuffix(fieldName, "Id")
+							if relationFieldName == fieldName {
+								// No Id suffix, use table name
+								relationFieldName = strcase.ToLowerCamel(col.FKTable)
+							}
+
+							fields[relationFieldName] = &graphql.Field{
+								Type:    relatedType,
+								Resolve: g.resolver.ResolveRelation(tenantSchema, col.FKTable, col.FKColumn, col.Name),
+							}
+						}
+					}
 				}
 
-				// TODO: Add relationships (FKs)
+				// Add reverse relations (hasMany) - e.g., posts for a user
+				for otherTableName, otherTable := range tableMap {
+					if otherTableName == table.Name {
+						continue
+					}
+					for _, otherCol := range otherTable.Columns {
+						if otherCol.IsFK && otherCol.FKTable == table.Name {
+							// This table has a FK pointing to current table
+							// Add a "hasMany" relation field
+							relatedType, exists := types[otherTableName]
+							if exists {
+								// Field name is plural of the related table
+								hasManyFieldName := strcase.ToLowerCamel(otherTableName)
+
+								fields[hasManyFieldName] = &graphql.Field{
+									Type: graphql.NewList(relatedType),
+									Args: graphql.FieldConfigArgument{
+										"limit": &graphql.ArgumentConfig{
+											Type: graphql.Int,
+										},
+										"offset": &graphql.ArgumentConfig{
+											Type: graphql.Int,
+										},
+									},
+									Resolve: g.resolver.ResolveHasMany(tenantSchema, otherTableName, otherCol.Name, otherCol.FKColumn),
+								}
+							}
+						}
+					}
+				}
+
 				return fields
 			}),
 		})

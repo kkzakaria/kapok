@@ -291,6 +291,163 @@ type GraphQLError struct {
 	Message string `json:"message"`
 }
 
+func TestGraphQLRelations(t *testing.T) {
+	setupPostgresContainer(t)
+	defer teardownPostgresContainer(t)
+	setupControlDatabase(t, testDB)
+
+	ctx := context.Background()
+	logger := zerolog.Nop()
+
+	db, err := database.NewDB(ctx, testDBConfig, logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	// 1. Create Tenant
+	provisioner := tenant.NewProvisioner(db, logger)
+	ten, err := provisioner.CreateTenant(ctx, "relations-test")
+	require.NoError(t, err)
+
+	// 2. Create authors and posts tables with FK relationship
+	_, err = testDB.ExecContext(ctx, fmt.Sprintf(`
+		CREATE TABLE %s.authors (
+			id SERIAL PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT
+		)
+	`, ten.SchemaName))
+	require.NoError(t, err)
+
+	_, err = testDB.ExecContext(ctx, fmt.Sprintf(`
+		CREATE TABLE %s.posts (
+			id SERIAL PRIMARY KEY,
+			title TEXT NOT NULL,
+			content TEXT,
+			author_id INTEGER REFERENCES %s.authors(id)
+		)
+	`, ten.SchemaName, ten.SchemaName))
+	require.NoError(t, err)
+
+	// 3. Initialize Handler
+	handler := NewHandler(db, logger)
+
+	// 4. Create an author
+	createAuthorQuery := `
+		mutation {
+			createAuthors(name: "John Doe", email: "john@example.com") {
+				id
+				name
+				email
+			}
+		}
+	`
+	resp := executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, createAuthorQuery)
+	require.Nil(t, resp.Errors, "createAuthors errors: %v", resp.Errors)
+
+	var authorResult struct {
+		CreateAuthors struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"createAuthors"`
+	}
+	err = json.Unmarshal(resp.Data, &authorResult)
+	require.NoError(t, err)
+	assert.Equal(t, "John Doe", authorResult.CreateAuthors.Name)
+	authorID := authorResult.CreateAuthors.ID
+
+	// 5. Create a post linked to the author
+	createPostQuery := fmt.Sprintf(`
+		mutation {
+			createPosts(title: "My First Post", content: "Hello World", authorId: %d) {
+				id
+				title
+				authorId
+			}
+		}
+	`, authorID)
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, createPostQuery)
+	require.Nil(t, resp.Errors, "createPosts errors: %v", resp.Errors)
+
+	var postResult struct {
+		CreatePosts struct {
+			ID       int    `json:"id"`
+			Title    string `json:"title"`
+			AuthorID int    `json:"authorId"`
+		} `json:"createPosts"`
+	}
+	err = json.Unmarshal(resp.Data, &postResult)
+	require.NoError(t, err)
+	assert.Equal(t, "My First Post", postResult.CreatePosts.Title)
+	assert.Equal(t, authorID, postResult.CreatePosts.AuthorID)
+
+	// 6. Test nested query: post with author (belongsTo relation)
+	nestedQuery := fmt.Sprintf(`
+		query {
+			postsById(id: "%d") {
+				id
+				title
+				author {
+					id
+					name
+					email
+				}
+			}
+		}
+	`, postResult.CreatePosts.ID)
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, nestedQuery)
+	require.Nil(t, resp.Errors, "nested query errors: %v", resp.Errors)
+
+	var nestedResult struct {
+		PostsById struct {
+			ID     int    `json:"id"`
+			Title  string `json:"title"`
+			Author struct {
+				ID    int    `json:"id"`
+				Name  string `json:"name"`
+				Email string `json:"email"`
+			} `json:"author"`
+		} `json:"postsById"`
+	}
+	err = json.Unmarshal(resp.Data, &nestedResult)
+	require.NoError(t, err)
+	assert.Equal(t, "My First Post", nestedResult.PostsById.Title)
+	assert.Equal(t, authorID, nestedResult.PostsById.Author.ID)
+	assert.Equal(t, "John Doe", nestedResult.PostsById.Author.Name)
+
+	// 7. Test reverse relation: author with posts (hasMany relation)
+	hasManyQuery := fmt.Sprintf(`
+		query {
+			authorsById(id: "%d") {
+				id
+				name
+				posts {
+					id
+					title
+				}
+			}
+		}
+	`, authorID)
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, hasManyQuery)
+	require.Nil(t, resp.Errors, "hasMany query errors: %v", resp.Errors)
+
+	var hasManyResult struct {
+		AuthorsById struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			Posts []struct {
+				ID    int    `json:"id"`
+				Title string `json:"title"`
+			} `json:"posts"`
+		} `json:"authorsById"`
+	}
+	err = json.Unmarshal(resp.Data, &hasManyResult)
+	require.NoError(t, err)
+	assert.Equal(t, "John Doe", hasManyResult.AuthorsById.Name)
+	assert.Len(t, hasManyResult.AuthorsById.Posts, 1)
+	assert.Equal(t, "My First Post", hasManyResult.AuthorsById.Posts[0].Title)
+}
+
 func executeGraphQLRequest(t *testing.T, handler *Handler, tenantID, schemaName, query string) GraphQLResponse {
 	reqBody := fmt.Sprintf(`{"query": %q}`, query)
 	req := httptest.NewRequest("POST", "/graphql", strings.NewReader(reqBody))
