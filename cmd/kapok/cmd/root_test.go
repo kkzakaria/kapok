@@ -2,8 +2,10 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapok/kapok/cmd/kapok/cmd"
 )
@@ -65,8 +67,15 @@ func TestInitCommand(t *testing.T) {
 }
 
 func TestDevCommand(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping dev command test in short mode - requires Docker")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	buf := new(bytes.Buffer)
-	err := cmd.ExecuteContext(buf, []string{"dev"})
+	err := cmd.ExecuteWithContext(ctx, buf, []string{"dev"})
 
 	if err != nil {
 		t.Fatalf("dev command failed: %v", err)
