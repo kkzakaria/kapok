@@ -19,6 +19,7 @@ type Options struct {
 	ImageTag  string
 	OutputDir string
 	DryRun    bool
+	Timeout   string
 }
 
 // Deployer orchestrates detect → generate → install → monitor.
@@ -80,12 +81,16 @@ func (d *Deployer) Run(opts Options) error {
 	}
 	log.Info().Msg("deploying with Helm")
 	chartPath := outputDir + "/kapok-platform"
+	timeout := opts.Timeout
+	if timeout == "" {
+		timeout = "10m"
+	}
 	output, err := d.Runner.Run("helm", "upgrade", "--install",
 		"kapok", chartPath,
 		"--namespace", opts.Namespace,
 		"--create-namespace",
 		"--wait",
-		"--timeout", "10m",
+		"--timeout", timeout,
 	)
 	if err != nil {
 		return fmt.Errorf("helm deploy failed: %w", err)

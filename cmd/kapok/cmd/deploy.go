@@ -39,6 +39,7 @@ func init() {
 	deployCmd.Flags().String("output-dir", "", "Output directory for generated charts")
 	deployCmd.Flags().Bool("dry-run", false, "Generate charts without deploying")
 	deployCmd.Flags().String("context", "", "Kubeconfig context name for cloud detection")
+	deployCmd.Flags().String("timeout", "10m", "Helm deploy timeout (e.g. 5m, 15m)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -53,6 +54,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	kubeContext, _ := cmd.Flags().GetString("context")
+	timeout, _ := cmd.Flags().GetString("timeout")
 
 	deployer := &deploy.Deployer{
 		Detector:  &k8s.KubeconfigDetector{ContextName: kubeContext},
@@ -70,6 +72,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		ImageTag:  imageTag,
 		OutputDir: outputDir,
 		DryRun:    dryRun,
+		Timeout:   timeout,
 	}
 
 	if err := deployer.Run(opts); err != nil {

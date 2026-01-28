@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -63,6 +64,9 @@ func (g *HelmChartGenerator) GenerateCharts(outputDir string, cfg ChartConfig) e
 	if err := writeRaw(filepath.Join(tmplDir, "namespace.yaml"), NamespaceYAML); err != nil {
 		return fmt.Errorf("failed to write namespace.yaml: %w", err)
 	}
+	if err := writeRaw(filepath.Join(tmplDir, "secrets.yaml"), SecretYAML); err != nil {
+		return fmt.Errorf("failed to write secrets.yaml: %w", err)
+	}
 	if cfg.TLSEnabled {
 		if err := writeRaw(filepath.Join(tmplDir, "cert-manager.yaml"), CertManagerYAML); err != nil {
 			return fmt.Errorf("failed to write cert-manager.yaml: %w", err)
@@ -87,25 +91,31 @@ func (g *HelmChartGenerator) GenerateCharts(outputDir string, cfg ChartConfig) e
 		}
 
 		n := sc.Name
+		replace := func(tmpl string) string {
+			return strings.ReplaceAll(tmpl, "%s", n)
+		}
 		if err := writeRaw(filepath.Join(scTmplDir, "deployment.yaml"),
-			fmt.Sprintf(DeploymentYAMLFmt, n, n, n, n, n, n)); err != nil {
+			replace(DeploymentYAMLTmpl)); err != nil {
 			return fmt.Errorf("failed to write %s deployment: %w", n, err)
 		}
 		if err := writeRaw(filepath.Join(scTmplDir, "service.yaml"),
-			fmt.Sprintf(ServiceYAMLFmt, n, n)); err != nil {
+			replace(ServiceYAMLTmpl)); err != nil {
 			return fmt.Errorf("failed to write %s service: %w", n, err)
 		}
 		if err := writeRaw(filepath.Join(scTmplDir, "ingress.yaml"),
-			fmt.Sprintf(IngressYAMLFmt, n, n, sc.PathPrefix, n)); err != nil {
+			strings.ReplaceAll(strings.Replace(IngressYAMLTmpl, "%PATH%", sc.PathPrefix, 1), "%s", n)); err != nil {
 			return fmt.Errorf("failed to write %s ingress: %w", n, err)
 		}
-		if err := writeRaw(filepath.Join(scTmplDir, "configmap.yaml"),
-			fmt.Sprintf(ConfigMapYAMLFmt, n)); err != nil {
+		cmTmpl, ok := configMapTemplates[n]
+		if !ok {
+			return fmt.Errorf("no configmap template for subchart %s", n)
+		}
+		if err := writeRaw(filepath.Join(scTmplDir, "configmap.yaml"), cmTmpl); err != nil {
 			return fmt.Errorf("failed to write %s configmap: %w", n, err)
 		}
 		if cfg.HPAEnabled {
 			if err := writeRaw(filepath.Join(scTmplDir, "hpa.yaml"),
-				fmt.Sprintf(HPAYAMLFmt, n, n)); err != nil {
+				replace(HPAYAMLTmpl)); err != nil {
 				return fmt.Errorf("failed to write %s hpa: %w", n, err)
 			}
 		}

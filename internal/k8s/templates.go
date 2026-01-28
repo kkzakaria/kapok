@@ -36,6 +36,11 @@ const ValuesYAML = `global:
     enabled: {{ .HPAEnabled }}
   keda:
     enabled: {{ .KEDAEnabled }}
+  secrets:
+    databasePassword: ""
+    jwtSecret: ""
+    databaseURL: ""
+    redisPassword: ""
 
 control-plane:
   replicaCount: 2
@@ -85,9 +90,9 @@ version: 0.1.0
 appVersion: "1.0.0"
 `
 
-// DeploymentYAMLFmt uses %%s for the component name (injected via fmt.Sprintf).
+// DeploymentYAMLTmpl uses %s as a placeholder for the component name (replaced via strings.ReplaceAll).
 // All {{ }} are literal Helm template directives.
-const DeploymentYAMLFmt = `apiVersion: apps/v1
+const DeploymentYAMLTmpl = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}-%s
@@ -126,10 +131,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-%s-config
+            - secretRef:
+                name: {{ .Release.Name }}-secrets
 `
 
-// ServiceYAMLFmt uses %s for the component name.
-const ServiceYAMLFmt = `apiVersion: v1
+// ServiceYAMLTmpl uses %s as a placeholder for the component name.
+const ServiceYAMLTmpl = `apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Release.Name }}-%s
@@ -144,8 +151,8 @@ spec:
   type: ClusterIP
 `
 
-// IngressYAMLFmt uses %s for the component name and path prefix.
-const IngressYAMLFmt = `apiVersion: networking.k8s.io/v1
+// IngressYAMLTmpl uses %s for the component name and %PATH% for the path prefix.
+const IngressYAMLTmpl = `apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Release.Name }}-%s
@@ -167,7 +174,7 @@ spec:
     - host: {{ .Values.global.domain }}
       http:
         paths:
-          - path: %s
+          - path: %PATH%
             pathType: Prefix
             backend:
               service:
@@ -176,17 +183,62 @@ spec:
                   number: 80
 `
 
-// ConfigMapYAMLFmt uses %s for the component name.
-const ConfigMapYAMLFmt = `apiVersion: v1
+// configMapTemplates holds per-service ConfigMap templates with service-specific env vars.
+var configMapTemplates = map[string]string{
+	"control-plane": `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-%s-config
+  name: {{ .Release.Name }}-control-plane-config
   namespace: {{ .Values.global.namespace }}
 data:
   KAPOK_SERVER_HOST: "0.0.0.0"
   KAPOK_SERVER_PORT: "8080"
   KAPOK_LOG_LEVEL: "info"
   KAPOK_LOG_FORMAT: "json"
+  KAPOK_SERVICE_ROLE: "control-plane"
+`,
+	"graphql-engine": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-graphql-engine-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  KAPOK_SERVER_HOST: "0.0.0.0"
+  KAPOK_SERVER_PORT: "8080"
+  KAPOK_LOG_LEVEL: "info"
+  KAPOK_LOG_FORMAT: "json"
+  KAPOK_SERVICE_ROLE: "graphql-engine"
+  KAPOK_GRAPHQL_INTROSPECTION: "true"
+  KAPOK_GRAPHQL_CACHE_TTL: "300"
+`,
+	"provisioner": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-provisioner-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  KAPOK_SERVER_HOST: "0.0.0.0"
+  KAPOK_SERVER_PORT: "8080"
+  KAPOK_LOG_LEVEL: "info"
+  KAPOK_LOG_FORMAT: "json"
+  KAPOK_SERVICE_ROLE: "provisioner"
+  KAPOK_PROVISIONER_SCHEMA_PREFIX: "tenant_"
+`,
+}
+
+// SecretYAML is a Helm template for the shared platform secrets.
+// Values are expected to be provided via --set or a values override at deploy time.
+const SecretYAML = `apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-secrets
+  namespace: {{ .Values.global.namespace }}
+type: Opaque
+stringData:
+  KAPOK_DATABASE_PASSWORD: {{ .Values.global.secrets.databasePassword | default "" | quote }}
+  KAPOK_JWT_SECRET: {{ .Values.global.secrets.jwtSecret | default "" | quote }}
+  KAPOK_DATABASE_URL: {{ .Values.global.secrets.databaseURL | default "" | quote }}
+  KAPOK_REDIS_PASSWORD: {{ .Values.global.secrets.redisPassword | default "" | quote }}
 `
 
 const NamespaceYAML = `apiVersion: v1

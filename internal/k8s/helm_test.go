@@ -34,6 +34,7 @@ func TestHelmChartGenerator_GenerateCharts_Basic(t *testing.T) {
 	assert.FileExists(t, filepath.Join(root, "Chart.yaml"))
 	assert.FileExists(t, filepath.Join(root, "values.yaml"))
 	assert.FileExists(t, filepath.Join(root, "templates", "namespace.yaml"))
+	assert.FileExists(t, filepath.Join(root, "templates", "secrets.yaml"))
 
 	// TLS files should not exist
 	assert.NoFileExists(t, filepath.Join(root, "templates", "cert-manager.yaml"))

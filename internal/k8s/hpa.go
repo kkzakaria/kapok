@@ -1,7 +1,7 @@
 package k8s
 
-// HPAYAMLFmt uses %s for the component name.
-const HPAYAMLFmt = `{{- if .Values.global.hpa.enabled }}
+// HPAYAMLTmpl uses %s as a placeholder for the component name.
+const HPAYAMLTmpl = `{{- if .Values.global.hpa.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

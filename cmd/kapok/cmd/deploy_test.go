@@ -20,6 +20,7 @@ func TestDeployCommand_Flags(t *testing.T) {
 		"image-tag":  "latest",
 		"output-dir": "",
 		"context":    "",
+		"timeout":    "10m",
 	}
 
 	for name, defVal := range flags {

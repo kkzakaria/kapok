@@ -146,6 +146,9 @@ func Defaults() *Config {
 		Kubernetes: KubernetesConfig{
 			Context:   "",
 			Namespace: "kapok",
+			Domain:    "kapok.local",
+			TLS:       false,
+			KEDA:      false,
 		},
 		Log: LogConfig{
 			Level:  "info",

@@ -2,7 +2,7 @@ package k8s
 
 import (
 	"bytes"
-	"fmt"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -14,11 +14,11 @@ func TestTemplateConstants_NotEmpty(t *testing.T) {
 	templates := map[string]string{
 		"ChartYAML":            ChartYAML,
 		"NamespaceYAML":        NamespaceYAML,
-		"DeploymentYAMLFmt":    DeploymentYAMLFmt,
-		"ServiceYAMLFmt":       ServiceYAMLFmt,
-		"IngressYAMLFmt":       IngressYAMLFmt,
-		"ConfigMapYAMLFmt":     ConfigMapYAMLFmt,
-		"HPAYAMLFmt":           HPAYAMLFmt,
+		"SecretYAML":           SecretYAML,
+		"DeploymentYAMLTmpl":   DeploymentYAMLTmpl,
+		"ServiceYAMLTmpl":      ServiceYAMLTmpl,
+		"IngressYAMLTmpl":      IngressYAMLTmpl,
+		"HPAYAMLTmpl":          HPAYAMLTmpl,
 		"CertManagerYAML":      CertManagerYAML,
 		"ClusterIssuerYAML":    ClusterIssuerYAML,
 		"KEDAScaledObjectYAML": KEDAScaledObjectYAML,
@@ -74,26 +74,40 @@ func TestSubchartChartTemplate_Renders(t *testing.T) {
 	assert.Contains(t, output, "description: Kapok Control Plane")
 }
 
-func TestFmtTemplates_Sprintf(t *testing.T) {
-	// Verify fmt.Sprintf works correctly with the Fmt templates
+func TestTemplates_ReplaceAll(t *testing.T) {
 	name := "control-plane"
-	path := "/api"
+	replace := func(tmpl string) string {
+		return strings.ReplaceAll(tmpl, "%s", name)
+	}
 
-	deployment := fmt.Sprintf(DeploymentYAMLFmt, name, name, name, name, name, name)
+	deployment := replace(DeploymentYAMLTmpl)
 	assert.Contains(t, deployment, "name: {{ .Release.Name }}-control-plane")
 	assert.Contains(t, deployment, "app: control-plane")
 
-	service := fmt.Sprintf(ServiceYAMLFmt, name, name)
+	service := replace(ServiceYAMLTmpl)
 	assert.Contains(t, service, "name: {{ .Release.Name }}-control-plane")
 
-	ingress := fmt.Sprintf(IngressYAMLFmt, name, name, path, name)
+	ingress := strings.ReplaceAll(strings.Replace(IngressYAMLTmpl, "%PATH%", "/api", 1), "%s", name)
 	assert.Contains(t, ingress, "path: /api")
 	assert.Contains(t, ingress, "secretName: control-plane-tls")
 
-	configmap := fmt.Sprintf(ConfigMapYAMLFmt, name)
-	assert.Contains(t, configmap, "name: {{ .Release.Name }}-control-plane-config")
-
-	hpa := fmt.Sprintf(HPAYAMLFmt, name, name)
+	hpa := replace(HPAYAMLTmpl)
 	assert.Contains(t, hpa, "name: {{ .Release.Name }}-control-plane")
 	assert.Contains(t, hpa, "averageUtilization: 70")
+}
+
+func TestConfigMapTemplates_PerService(t *testing.T) {
+	for _, name := range []string{"control-plane", "graphql-engine", "provisioner"} {
+		t.Run(name, func(t *testing.T) {
+			tmpl, ok := configMapTemplates[name]
+			assert.True(t, ok, "configmap template should exist for %s", name)
+			assert.Contains(t, tmpl, "KAPOK_SERVICE_ROLE")
+			assert.Contains(t, tmpl, name)
+		})
+	}
+}
+
+func TestSecretTemplate_NotEmpty(t *testing.T) {
+	assert.Contains(t, SecretYAML, "KAPOK_DATABASE_PASSWORD")
+	assert.Contains(t, SecretYAML, "KAPOK_JWT_SECRET")
 }

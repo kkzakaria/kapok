@@ -1,14 +1,16 @@
 package k8s
 
+// KEDAScaledObjectYAML is a Helm template written verbatim to disk via writeRaw.
+// All {{ }} directives are standard Helm/Go template syntax, evaluated by Helm at install time.
 const KEDAScaledObjectYAML = `{{- if .Values.global.keda.enabled }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ "{{ .Release.Name }}" }}-graphql-engine-keda
-  namespace: {{ "{{ .Values.global.namespace }}" }}
+  name: {{ .Release.Name }}-graphql-engine-keda
+  namespace: {{ .Values.global.namespace }}
 spec:
   scaleTargetRef:
-    name: {{ "{{ .Release.Name }}" }}-graphql-engine
+    name: {{ .Release.Name }}-graphql-engine
   pollingInterval: 15
   cooldownPeriod: 300
   minReplicaCount: 2
