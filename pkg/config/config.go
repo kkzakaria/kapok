@@ -44,6 +44,9 @@ type RedisConfig struct {
 type KubernetesConfig struct {
 	Context   string `mapstructure:"context"`
 	Namespace string `mapstructure:"namespace"`
+	Domain    string `mapstructure:"domain"`
+	TLS       bool   `mapstructure:"tls"`
+	KEDA      bool   `mapstructure:"keda"`
 }
 
 // LogConfig holds logging configuration
@@ -143,6 +146,9 @@ func Defaults() *Config {
 		Kubernetes: KubernetesConfig{
 			Context:   "",
 			Namespace: "kapok",
+			Domain:    "kapok.local",
+			TLS:       false,
+			KEDA:      false,
 		},
 		Log: LogConfig{
 			Level:  "info",
