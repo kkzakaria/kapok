@@ -10,7 +10,6 @@ import (
 	"github.com/kapok/kapok/internal/tenant"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // NewCreateCommand creates the tenant create command
@@ -38,13 +37,9 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get database configuration
-	dbConfig := database.Config{
-		Host:     viper.GetString("database.host"),
-		Port:     viper.GetInt("database.port"),
-		Database: viper.GetString("database.name"),
-		User:     viper.GetString("database.user"),
-		Password: viper.GetString("database.password"),
-		SSLMode:  viper.GetString("database.sslmode"),
+	dbConfig, err := loadDBConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Connect to database
