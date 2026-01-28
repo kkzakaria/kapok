@@ -29,7 +29,7 @@ func TestAuthMiddleware_Success(t *testing.T) {
 	// Create test handler
 	var capturedClaims map[string]interface{}
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := r.Context().Value("jwt_claims").(map[string]interface{})
+		claims, ok := r.Context().Value(JwtClaimsKey).(map[string]interface{})
 		require.True(t, ok)
 		capturedClaims = claims
 		w.WriteHeader(http.StatusOK)
@@ -175,7 +175,7 @@ func TestOptionalAuthMiddleware_WithValidToken(t *testing.T) {
 
 	var hasClaims bool
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, hasClaims = r.Context().Value("jwt_claims").(map[string]interface{})
+		_, hasClaims = r.Context().Value(JwtClaimsKey).(map[string]interface{})
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -198,7 +198,7 @@ func TestOptionalAuthMiddleware_WithoutToken(t *testing.T) {
 
 	var hasClaims bool
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, hasClaims = r.Context().Value("jwt_claims").(map[string]interface{})
+		_, hasClaims = r.Context().Value(JwtClaimsKey).(map[string]interface{})
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -220,7 +220,7 @@ func TestOptionalAuthMiddleware_WithInvalidToken(t *testing.T) {
 
 	var hasClaims bool
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, hasClaims = r.Context().Value("jwt_claims").(map[string]interface{})
+		_, hasClaims = r.Context().Value(JwtClaimsKey).(map[string]interface{})
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -269,7 +269,7 @@ func TestAuthMiddleware_ContextPropagation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.NotNil(t, receivedContext)
 	
-	claims, ok := receivedContext.Value("jwt_claims").(map[string]interface{})
+	claims, ok := receivedContext.Value(JwtClaimsKey).(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, user.ID, claims["sub"])
 }

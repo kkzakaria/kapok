@@ -6,9 +6,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kapok/kapok/internal/auth"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// Valid UUIDs for testing
+const (
+	validTenantID1 = "123e4567-e89b-12d3-a456-426614174000"
+	validTenantID2 = "223e4567-e89b-12d3-a456-426614174000"
+	validTenantID3 = "323e4567-e89b-12d3-a456-426614174000"
 )
 
 func TestRouterMiddleware_Success(t *testing.T) {
@@ -29,8 +37,8 @@ func TestRouterMiddleware_Success(t *testing.T) {
 
 	// Create request with JWT claims in context
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
-		"tenant_id": "test-tenant-123",
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
+		"tenant_id": validTenantID1,
 		"user_id":   "user-456",
 	})
 	req = req.WithContext(ctx)
@@ -41,7 +49,7 @@ func TestRouterMiddleware_Success(t *testing.T) {
 
 	// Assertions
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "test-tenant-123", capturedTenantID)
+	assert.Equal(t, validTenantID1, capturedTenantID)
 }
 
 func TestRouterMiddleware_MissingJWTClaims(t *testing.T) {
@@ -76,7 +84,7 @@ func TestRouterMiddleware_MissingTenantID(t *testing.T) {
 
 	// Request with JWT claims but no tenant_id
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
 		"user_id": "user-456",
 	})
 	req = req.WithContext(ctx)
@@ -101,7 +109,7 @@ func TestRouterMiddleware_InvalidTenantIDType(t *testing.T) {
 
 	// Request with tenant_id as wrong type
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
 		"tenant_id": 12345, // Wrong type - should be string
 	})
 	req = req.WithContext(ctx)
@@ -126,7 +134,7 @@ func TestRouterMiddleware_EmptyTenantID(t *testing.T) {
 
 	// Request with empty tenant_id
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
 		"tenant_id": "",
 	})
 	req = req.WithContext(ctx)
@@ -157,8 +165,8 @@ func TestRouterMiddleware_ContextPropagation(t *testing.T) {
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
-		"tenant_id": "test-123",
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
+		"tenant_id": validTenantID1,
 	})
 	req = req.WithContext(ctx)
 
@@ -185,10 +193,10 @@ func TestRouterMiddleware_MultipleRequests(t *testing.T) {
 	handler := middleware.Middleware(testHandler)
 
 	// Test multiple requests with different tenant IDs
-	tenants := []string{"tenant-1", "tenant-2", "tenant-3"}
+	tenants := []string{validTenantID1, validTenantID2, validTenantID3}
 	for _, tenantID := range tenants {
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		ctx := context.WithValue(req.Context(), "jwt_claims", map[string]interface{}{
+		ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
 			"tenant_id": tenantID,
 		})
 		req = req.WithContext(ctx)
@@ -201,4 +209,29 @@ func TestRouterMiddleware_MultipleRequests(t *testing.T) {
 
 	// Verify all tenant IDs were captured correctly
 	assert.Equal(t, tenants, capturedTenantIDs)
+}
+
+func TestRouterMiddleware_InvalidUUID(t *testing.T) {
+	logger := zerolog.Nop()
+	middleware := NewRouterMiddleware(logger)
+
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	})
+
+	handler := middleware.Middleware(testHandler)
+
+	// Request with invalid UUID
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	ctx := context.WithValue(req.Context(), auth.JwtClaimsKey, map[string]interface{}{
+		"tenant_id": "invalid-uuid-string",
+	})
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should return 401
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	assert.Contains(t, rr.Body.String(), "must be a valid UUID")
 }
