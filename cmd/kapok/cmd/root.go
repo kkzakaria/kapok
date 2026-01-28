@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -34,15 +35,20 @@ Features:
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() error {
-	return ExecuteContext(os.Stdout, os.Args[1:])
+	return ExecuteWithContext(context.Background(), os.Stdout, os.Args[1:])
 }
 
 // ExecuteContext is the testable version of Execute that accepts io.Writer and args
 func ExecuteContext(out io.Writer, args []string) error {
+	return ExecuteWithContext(context.Background(), out, args)
+}
+
+// ExecuteWithContext is like ExecuteContext but accepts a context for cancellation
+func ExecuteWithContext(ctx context.Context, out io.Writer, args []string) error {
 	rootCmd.SetOut(out)
 	rootCmd.SetErr(out)
 	rootCmd.SetArgs(args)
-	return rootCmd.Execute()
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {

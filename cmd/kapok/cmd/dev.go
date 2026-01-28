@@ -23,7 +23,7 @@ var devCmd = &cobra.Command{
 Requires Docker to be installed and running.
 Creates a PostgreSQL container accessible on localhost:5432.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 
 		// Initialize logger
 		logger.Init(logger.Config{
@@ -106,8 +106,10 @@ Creates a PostgreSQL container accessible on localhost:5432.`,
 		log.Info().Msgf("  Database: %s", pgDatabase)
 		log.Info().Msg("\n💡 Press Ctrl+C to stop")
 
-		// Keep running until interrupted
-		select {}
+		// Keep running until context is cancelled (e.g. Ctrl+C or test timeout)
+		<-ctx.Done()
+		log.Info().Msg("Shutting down development environment")
+		return nil
 	},
 }
 
