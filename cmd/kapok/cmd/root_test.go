@@ -88,15 +88,16 @@ func TestDevCommand(t *testing.T) {
 }
 
 func TestDeployCommand(t *testing.T) {
+	dir := t.TempDir()
 	buf := new(bytes.Buffer)
-	err := cmd.ExecuteContext(buf, []string{"deploy"})
+	err := cmd.ExecuteContext(buf, []string{"deploy", "--dry-run", "--output-dir", dir})
 
 	if err != nil {
 		t.Fatalf("deploy command failed: %v", err)
 	}
 
 	got := buf.String()
-	if !strings.Contains(got, "Deploying Kapok") {
+	if !strings.Contains(got, "Deployment complete") {
 		t.Errorf("Expected output to contain deployment info")
 	}
 }
