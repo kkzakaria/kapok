@@ -8,6 +8,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// ContextKey is a custom type for context keys to avoid collisions
+type ContextKey string
+
+const (
+	// JwtClaimsKey is the context key for JWT claims
+	JwtClaimsKey ContextKey = "jwt_claims"
+)
+
 // AuthMiddleware handles JWT authentication for HTTP requests
 type AuthMiddleware struct {
 	jwtManager *JWTManager
@@ -64,7 +72,7 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 
 		// Add claims to context (convert jwt.MapClaims to map[string]interface{})
 		claimsMap := map[string]interface{}(claims)
-		ctx := context.WithValue(r.Context(), "jwt_claims", claimsMap)
+		ctx := context.WithValue(r.Context(), JwtClaimsKey, claimsMap)
 
 		// Continue to next handler
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -88,7 +96,7 @@ func (m *AuthMiddleware) OptionalAuthMiddleware(next http.Handler) http.Handler 
 			if err == nil {
 				// Valid token, add to context
 				claimsMap := map[string]interface{}(claims)
-				ctx := context.WithValue(r.Context(), "jwt_claims", claimsMap)
+				ctx := context.WithValue(r.Context(), JwtClaimsKey, claimsMap)
 				r = r.WithContext(ctx)
 			}
 		}

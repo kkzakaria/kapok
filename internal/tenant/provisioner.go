@@ -88,7 +88,12 @@ func (p *Provisioner) CreateTenant(ctx context.Context, name string) (*Tenant, e
 	// Create tenant schema (outside transaction for DDL)
 	if err := p.migrator.CreateTenantSchema(ctx, schemaName); err != nil {
 		// Rollback: delete tenant metadata
-		p.deleteTenantMetadata(ctx, tenantID)
+		if rollbackErr := p.deleteTenantMetadata(ctx, tenantID); rollbackErr != nil {
+			p.logger.Error().
+				Err(rollbackErr).
+				Str("tenant_id", tenantID).
+				Msg("failed to rollback tenant metadata after schema creation failure")
+		}
 		return nil, fmt.Errorf("failed to create tenant schema: %w", err)
 	}
 

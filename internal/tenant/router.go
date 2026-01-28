@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
+	"github.com/kapok/kapok/internal/auth"
 	"github.com/rs/zerolog"
 )
 
@@ -26,7 +28,7 @@ func (m *RouterMiddleware) Middleware(next http.Handler) http.Handler {
 		ctx := r.Context()
 
 		// Extract tenant_id from JWT claims (claims should be in context from auth middleware)
-		claims, ok := ctx.Value("jwt_claims").(map[string]interface{})
+		claims, ok := ctx.Value(auth.JwtClaimsKey).(map[string]interface{})
 		if !ok {
 			m.logger.Error().Msg("JWT claims not found in context")
 			http.Error(w, "Unauthorized: JWT claims missing", http.StatusUnauthorized)
@@ -45,6 +47,16 @@ func (m *RouterMiddleware) Middleware(next http.Handler) http.Handler {
 		if !ok || tenantID == "" {
 			m.logger.Error().Msg("tenant_id is not a valid string")
 			http.Error(w, "Unauthorized: invalid tenant_id", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate tenant_id is a valid UUID
+		if _, err := uuid.Parse(tenantID); err != nil {
+			m.logger.Error().
+				Err(err).
+				Str("tenant_id", tenantID).
+				Msg("tenant_id is not a valid UUID")
+			http.Error(w, "Unauthorized: tenant_id must be a valid UUID", http.StatusUnauthorized)
 			return
 		}
 
