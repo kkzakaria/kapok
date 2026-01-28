@@ -177,6 +177,119 @@ func (r *Resolver) ResolveCreate(schemaName, tableName string, columns []string)
 	}
 }
 
+// ResolveUpdate returns a function that updates an existing record by primary key
+func (r *Resolver) ResolveUpdate(schemaName, tableName, pkName string, columns []string) graphql.FieldResolveFn {
+	return func(p graphql.ResolveParams) (interface{}, error) {
+		// Validate identifiers to prevent SQL injection
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(tableName); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+		if err := validateIdentifier(pkName); err != nil {
+			return nil, fmt.Errorf("invalid primary key name")
+		}
+
+		// Get primary key value
+		id, ok := p.Args[pkName]
+		if !ok {
+			return nil, fmt.Errorf("argument %s is required", pkName)
+		}
+
+		var setClauses []string
+		var vals []interface{}
+		argIdx := 1
+
+		for _, col := range columns {
+			// Skip primary key in SET clause
+			if col == pkName {
+				continue
+			}
+			// Validate column name
+			if err := validateIdentifier(col); err != nil {
+				continue
+			}
+			// Convert column name (snake_case) to argument name (camelCase)
+			argName := strcase.ToLowerCamel(col)
+			if val, ok := p.Args[argName]; ok {
+				setClauses = append(setClauses, fmt.Sprintf(`"%s" = $%d`, col, argIdx))
+				vals = append(vals, val)
+				argIdx++
+			}
+		}
+
+		if len(setClauses) == 0 {
+			return nil, fmt.Errorf("no fields to update")
+		}
+
+		// Add ID as the last parameter
+		vals = append(vals, id)
+
+		query := fmt.Sprintf(
+			`UPDATE "%s"."%s" SET %s WHERE "%s" = $%d RETURNING *`,
+			schemaName, tableName,
+			strings.Join(setClauses, ", "),
+			pkName, argIdx,
+		)
+
+		rows, err := r.db.QueryContext(p.Context, query, vals...)
+		if err != nil {
+			return nil, fmt.Errorf("update failed")
+		}
+		defer rows.Close()
+
+		results, err := r.scanRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read results")
+		}
+
+		if len(results) == 0 {
+			return nil, nil // Record not found
+		}
+		return results[0], nil
+	}
+}
+
+// ResolveDelete returns a function that deletes a record by primary key
+func (r *Resolver) ResolveDelete(schemaName, tableName, pkName string) graphql.FieldResolveFn {
+	return func(p graphql.ResolveParams) (interface{}, error) {
+		// Validate identifiers to prevent SQL injection
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(tableName); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+		if err := validateIdentifier(pkName); err != nil {
+			return nil, fmt.Errorf("invalid primary key name")
+		}
+
+		id, ok := p.Args[pkName]
+		if !ok {
+			return nil, fmt.Errorf("argument %s is required", pkName)
+		}
+
+		query := fmt.Sprintf(`DELETE FROM "%s"."%s" WHERE "%s" = $1 RETURNING *`, schemaName, tableName, pkName)
+
+		rows, err := r.db.QueryContext(p.Context, query, id)
+		if err != nil {
+			return nil, fmt.Errorf("delete failed")
+		}
+		defer rows.Close()
+
+		results, err := r.scanRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read results")
+		}
+
+		if len(results) == 0 {
+			return nil, nil // Record not found
+		}
+		return results[0], nil
+	}
+}
+
 // helper to scan rows into map[string]interface{}
 func (r *Resolver) scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 	colNames, err := rows.Columns()

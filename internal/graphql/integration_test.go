@@ -221,6 +221,65 @@ func TestDynamicGraphQLAPI(t *testing.T) {
 	err = json.Unmarshal(resp.Data, &getResult)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello World", getResult.PostsById.Title)
+
+	// 7. Test Mutation (Update Post)
+	updateQuery := fmt.Sprintf(`
+		mutation {
+			updatePosts(id: "%d", title: "Updated Title", content: "Updated content") {
+				id
+				title
+				content
+				isPublished
+			}
+		}
+	`, createResult.CreatePosts.ID)
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, updateQuery)
+	require.Nil(t, resp.Errors)
+
+	var updateResult struct {
+		UpdatePosts struct {
+			ID          int    `json:"id"`
+			Title       string `json:"title"`
+			Content     string `json:"content"`
+			IsPublished bool   `json:"isPublished"`
+		} `json:"updatePosts"`
+	}
+	err = json.Unmarshal(resp.Data, &updateResult)
+	require.NoError(t, err)
+	assert.Equal(t, createResult.CreatePosts.ID, updateResult.UpdatePosts.ID)
+	assert.Equal(t, "Updated Title", updateResult.UpdatePosts.Title)
+	assert.Equal(t, "Updated content", updateResult.UpdatePosts.Content)
+	assert.True(t, updateResult.UpdatePosts.IsPublished) // Should remain unchanged
+
+	// 8. Test Mutation (Delete Post)
+	deleteQuery := fmt.Sprintf(`
+		mutation {
+			deletePosts(id: "%d") {
+				id
+				title
+			}
+		}
+	`, createResult.CreatePosts.ID)
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, deleteQuery)
+	require.Nil(t, resp.Errors)
+
+	var deleteResult struct {
+		DeletePosts struct {
+			ID    int    `json:"id"`
+			Title string `json:"title"`
+		} `json:"deletePosts"`
+	}
+	err = json.Unmarshal(resp.Data, &deleteResult)
+	require.NoError(t, err)
+	assert.Equal(t, createResult.CreatePosts.ID, deleteResult.DeletePosts.ID)
+	assert.Equal(t, "Updated Title", deleteResult.DeletePosts.Title)
+
+	// 9. Verify Post is deleted
+	resp = executeGraphQLRequest(t, handler, ten.ID, ten.SchemaName, listQuery)
+	require.Nil(t, resp.Errors)
+	err = json.Unmarshal(resp.Data, &listResult)
+	require.NoError(t, err)
+	assert.Len(t, listResult.Posts, 0)
 }
 
 type GraphQLResponse struct {

@@ -126,8 +126,48 @@ func (g *SchemaGenerator) Generate(tenantSchema string, metadata *SchemaMetadata
 			Args:    createArgs,
 			Resolve: g.resolver.ResolveCreate(tenantSchema, tableName, createCols),
 		}
-		
-		// TODO: Update and Delete mutations
+
+		// Update Mutation: updatePosts(id: ID!, title: String, ...)
+		if pkName != "" {
+			updateArgs := graphql.FieldConfigArgument{
+				pkName: &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.ID),
+				},
+			}
+			var updateCols []string
+
+			for _, col := range table.Columns {
+				argName := strcase.ToLowerCamel(col.Name)
+				// Skip PK in update args (already added as required)
+				if col.Name == pkName {
+					updateCols = append(updateCols, col.Name)
+					continue
+				}
+				argType := g.getGraphQLType(col.DataType)
+				// All fields are optional for updates
+				updateArgs[argName] = &graphql.ArgumentConfig{
+					Type: argType,
+				}
+				updateCols = append(updateCols, col.Name)
+			}
+
+			mutationFields["update"+typeName] = &graphql.Field{
+				Type:    gqlType,
+				Args:    updateArgs,
+				Resolve: g.resolver.ResolveUpdate(tenantSchema, tableName, pkName, updateCols),
+			}
+
+			// Delete Mutation: deletePosts(id: ID!)
+			mutationFields["delete"+typeName] = &graphql.Field{
+				Type: gqlType,
+				Args: graphql.FieldConfigArgument{
+					pkName: &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.ID),
+					},
+				},
+				Resolve: g.resolver.ResolveDelete(tenantSchema, tableName, pkName),
+			}
+		}
 	}
 
 	rootMutation := graphql.NewObject(graphql.ObjectConfig{
