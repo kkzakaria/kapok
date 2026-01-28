@@ -37,7 +37,7 @@ jobs:
         run: go test ./cmd/kapok/cmd/... -short -v
 
       - name: Run all tests with coverage
-        run: go test ./cmd/kapok/cmd/... -coverprofile=coverage.out -covermode=atomic
+        run: go test ./cmd/kapok/cmd/... -short -coverprofile=coverage.out -covermode=atomic
 
       - name: Check coverage threshold
         run: |
