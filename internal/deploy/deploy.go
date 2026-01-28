@@ -3,6 +3,7 @@ package deploy
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/kapok/kapok/internal/k8s"
 	"github.com/rs/zerolog/log"
@@ -80,7 +81,7 @@ func (d *Deployer) Run(opts Options) error {
 		defer os.RemoveAll(outputDir)
 	}
 	log.Info().Msg("deploying with Helm")
-	chartPath := outputDir + "/kapok-platform"
+	chartPath := filepath.Join(outputDir, "kapok-platform")
 	timeout := opts.Timeout
 	if timeout == "" {
 		timeout = "10m"
