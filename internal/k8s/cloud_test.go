@@ -21,6 +21,10 @@ func TestKubeconfigDetector_Detect(t *testing.T) {
 		{"Generic minikube", "minikube", CloudGeneric},
 		{"Generic kind", "kind-kind", CloudGeneric},
 		{"Empty context", "", CloudGeneric},
+		{"No false positive on desktop (eks)", "my-deksktop-cluster", CloudGeneric},
+		{"No false positive on makes (aks)", "makes-cluster", CloudGeneric},
+		{"EKS with dashes", "my-eks-cluster", CloudAWS},
+		{"AKS with dashes", "my-aks-cluster", CloudAzure},
 	}
 
 	for _, tt := range tests {

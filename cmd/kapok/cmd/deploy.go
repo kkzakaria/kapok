@@ -38,6 +38,7 @@ func init() {
 	deployCmd.Flags().String("image-tag", "latest", "Docker image tag")
 	deployCmd.Flags().String("output-dir", "", "Output directory for generated charts")
 	deployCmd.Flags().Bool("dry-run", false, "Generate charts without deploying")
+	deployCmd.Flags().String("context", "", "Kubeconfig context name for cloud detection")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {

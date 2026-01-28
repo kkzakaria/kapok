@@ -19,6 +19,7 @@ func TestDeployCommand_Flags(t *testing.T) {
 		"domain":     "kapok.local",
 		"image-tag":  "latest",
 		"output-dir": "",
+		"context":    "",
 	}
 
 	for name, defVal := range flags {

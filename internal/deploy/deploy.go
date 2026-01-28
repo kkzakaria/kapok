@@ -54,12 +54,14 @@ func (d *Deployer) Run(opts Options) error {
 
 	// 3. Generate charts
 	outputDir := opts.OutputDir
+	autoCreated := false
 	if outputDir == "" {
 		var err error
 		outputDir, err = os.MkdirTemp("", "kapok-charts-*")
 		if err != nil {
 			return fmt.Errorf("failed to create temp dir: %w", err)
 		}
+		autoCreated = true
 	}
 
 	log.Info().Str("output_dir", outputDir).Msg("generating Helm charts")
@@ -73,6 +75,9 @@ func (d *Deployer) Run(opts Options) error {
 	}
 
 	// 4. Helm install/upgrade
+	if autoCreated {
+		defer os.RemoveAll(outputDir)
+	}
 	log.Info().Msg("deploying with Helm")
 	chartPath := outputDir + "/kapok-platform"
 	output, err := d.Runner.Run("helm", "upgrade", "--install",
