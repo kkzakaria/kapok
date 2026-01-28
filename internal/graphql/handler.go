@@ -4,23 +4,39 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/graphql-go/graphql"
 	gqlhandler "github.com/graphql-go/handler"
 	"github.com/kapok/kapok/internal/database"
+	"github.com/kapok/kapok/internal/tenant"
 	"github.com/rs/zerolog"
 )
+
+const (
+	// SchemaCacheTTL is the time-to-live for cached schemas
+	SchemaCacheTTL = 5 * time.Minute
+)
+
+// validIdentifier matches valid PostgreSQL identifiers
+var validIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// cachedSchema holds a schema with its expiration time
+type cachedSchema struct {
+	schema    *graphql.Schema
+	expiresAt time.Time
+}
 
 // Handler serves GraphQL requests with dynamic schema generation
 type Handler struct {
 	introspector *Introspector
 	generator    *SchemaGenerator
 	logger       zerolog.Logger
-	
-	// Simple in-memory cache for schemas
-	// Key: schemaName (tenant_id), Value: *graphql.Schema
+
+	// In-memory cache for schemas with TTL
+	// Key: schemaName, Value: *cachedSchema
 	schemaCache sync.Map
 }
 
@@ -35,57 +51,63 @@ func NewHandler(db *database.DB, logger zerolog.Logger) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 1. Get Tenant Context
-	// In a real middleware, tenant_id would be in context.
-	// For MVP/Verification, if context is missing, we might error or fallback (unlikely).
-	// Let's assume the router middleware puts "tenant_id" and "schema_name" in context.
-	// But `internal/tenant/router.go` typically handles this.
-	// For now, let's extract it or fail.
-	
-	tenantID, ok := r.Context().Value("tenant_id").(string)
-	if !ok || tenantID == "" {
-		http.Error(w, "tenant_id context required", http.StatusUnauthorized)
+	ctx := r.Context()
+
+	// 1. Get Tenant Context using the tenant package
+	t, err := tenant.GetTenant(ctx)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("tenant not found in context")
+		http.Error(w, "unauthorized: tenant context required", http.StatusUnauthorized)
 		return
 	}
-	
-	schemaName, ok := r.Context().Value("schema_name").(string)
-	if !ok || schemaName == "" {
-		// Fallback naming convention: tenant_<id> or just use ID if simple
-		// Ideally middleware sets this. 
-		http.Error(w, "schema_name context required", http.StatusInternalServerError)
+
+	schemaName := t.SchemaName
+	if schemaName == "" {
+		h.logger.Error().Str("tenant_id", t.ID).Msg("tenant has no schema name")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Validate schema name to prevent injection
+	if !validIdentifier.MatchString(schemaName) {
+		h.logger.Error().Str("schema_name", schemaName).Msg("invalid schema name format")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	h.logger.Debug().
-		Str("tenant_id", tenantID).
+		Str("tenant_id", t.ID).
 		Str("schema_name", schemaName).
 		Msg("handling graphql request")
 
 	// 2. Get Schema (Cache or Generate)
-	schema, err := h.getSchema(r.Context(), schemaName)
+	schema, err := h.getSchema(ctx, schemaName)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to get schema")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.logger.Error().Err(err).Str("schema_name", schemaName).Msg("failed to get schema")
+		http.Error(w, "failed to load schema", http.StatusInternalServerError)
 		return
 	}
 
 	// 3. Serve via standard handler
-	// We create a new handler instance for this request's schema.
-	// In high-load, we might want to cache the *handler* itself too, 
-	// but *graphql.Schema represents the heavy lifting.
 	gh := gqlhandler.New(&gqlhandler.Config{
 		Schema:   schema,
 		Pretty:   true,
-		GraphiQL: false, // Can be enabled via query param or env
+		GraphiQL: false,
 	})
 
 	gh.ServeHTTP(w, r)
 }
 
 func (h *Handler) getSchema(ctx context.Context, schemaName string) (*graphql.Schema, error) {
-	// Check cache
+	// Check cache with TTL
 	if val, ok := h.schemaCache.Load(schemaName); ok {
-		return val.(*graphql.Schema), nil
+		cached := val.(*cachedSchema)
+		if time.Now().Before(cached.expiresAt) {
+			return cached.schema, nil
+		}
+		// Cache expired, remove it
+		h.schemaCache.Delete(schemaName)
+		h.logger.Debug().Str("schema_name", schemaName).Msg("schema cache expired")
 	}
 
 	start := time.Now()
@@ -102,13 +124,17 @@ func (h *Handler) getSchema(ctx context.Context, schemaName string) (*graphql.Sc
 		return nil, fmt.Errorf("schema generation failed: %w", err)
 	}
 
-	// Cache
-	h.schemaCache.Store(schemaName, schema)
+	// Cache with TTL
+	h.schemaCache.Store(schemaName, &cachedSchema{
+		schema:    schema,
+		expiresAt: time.Now().Add(SchemaCacheTTL),
+	})
 
 	h.logger.Info().
 		Str("schema_name", schemaName).
 		Int("tables", len(metadata.Tables)).
 		Dur("duration", time.Since(start)).
+		Dur("cache_ttl", SchemaCacheTTL).
 		Msg("schema generated and cached")
 
 	return schema, nil

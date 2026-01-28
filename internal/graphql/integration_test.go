@@ -236,10 +236,14 @@ func executeGraphQLRequest(t *testing.T, handler *Handler, tenantID, schemaName,
 	reqBody := fmt.Sprintf(`{"query": %q}`, query)
 	req := httptest.NewRequest("POST", "/graphql", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
-	
-	// Inject context
-	ctx := context.WithValue(req.Context(), "tenant_id", tenantID)
-	ctx = context.WithValue(ctx, "schema_name", schemaName)
+
+	// Inject tenant context using the tenant package
+	ten := &tenant.Tenant{
+		ID:         tenantID,
+		SchemaName: schemaName,
+		Status:     tenant.StatusActive,
+	}
+	ctx := tenant.WithTenant(req.Context(), ten)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()

@@ -3,12 +3,31 @@ package graphql
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/graphql-go/graphql"
 	"github.com/iancoleman/strcase"
 	"github.com/kapok/kapok/internal/database"
 )
+
+const (
+	// DefaultLimit is the default number of rows returned for list queries
+	DefaultLimit = 100
+	// MaxLimit is the maximum number of rows that can be requested
+	MaxLimit = 1000
+)
+
+// validSQLIdentifier matches valid PostgreSQL identifiers
+var validSQLIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// validateIdentifier checks if a string is a valid SQL identifier
+func validateIdentifier(name string) error {
+	if !validSQLIdentifier.MatchString(name) {
+		return fmt.Errorf("invalid identifier: %s", name)
+	}
+	return nil
+}
 
 // Resolver handles GraphQL query execution against the database
 type Resolver struct {
@@ -23,23 +42,35 @@ func NewResolver(db *database.DB) *Resolver {
 // ResolveList returns a function that resolves a list of records from a table
 func (r *Resolver) ResolveList(schemaName, tableName string) graphql.FieldResolveFn {
 	return func(p graphql.ResolveParams) (interface{}, error) {
-		// Basic SELECT * FROM schema.table
-		// TODO: Add support for filtering, sorting, pagination based on args
+		// Validate identifiers to prevent SQL injection
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(tableName); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+
 		query := fmt.Sprintf(`SELECT * FROM "%s"."%s"`, schemaName, tableName)
-		
+
+		// Apply limit with defaults and maximum cap
 		limit, _ := p.Args["limit"].(int)
 		offset, _ := p.Args["offset"].(int)
-		
-		if limit > 0 {
-			query += fmt.Sprintf(" LIMIT %d", limit)
+
+		if limit <= 0 {
+			limit = DefaultLimit
 		}
+		if limit > MaxLimit {
+			limit = MaxLimit
+		}
+
+		query += fmt.Sprintf(" LIMIT %d", limit)
 		if offset > 0 {
 			query += fmt.Sprintf(" OFFSET %d", offset)
 		}
 
 		rows, err := r.db.QueryContext(p.Context, query)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("query failed")
 		}
 		defer rows.Close()
 
@@ -50,32 +81,33 @@ func (r *Resolver) ResolveList(schemaName, tableName string) graphql.FieldResolv
 // ResolveGet returns a function that resolves a single record by primary key
 func (r *Resolver) ResolveGet(schemaName, tableName string, pkName string) graphql.FieldResolveFn {
 	return func(p graphql.ResolveParams) (interface{}, error) {
-		// Arg name is also camelCase usually, but pkName passed here is from DB col (snake).
-		// Schema generator logic:
-		// pkName arg: pkName (which is col.Name aka snake_case? No wait).
-		// SchemaGenerator: pkName := col.Name.
-		// Args: pkName: ...  (So arg name IS snake_case).
-		// Let's check SchemaGenerator.
-		// Args: graphql.FieldConfigArgument{ pkName: ... } -> pkName is col.Name (snake).
-		// So ResolveGet is correct for now (uses p.Args[pkName]).
-		// BUT ResolveCreate is different.
-		
+		// Validate identifiers to prevent SQL injection
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(tableName); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+		if err := validateIdentifier(pkName); err != nil {
+			return nil, fmt.Errorf("invalid primary key name")
+		}
+
 		id, ok := p.Args[pkName]
 		if !ok {
 			return nil, fmt.Errorf("argument %s is required", pkName)
 		}
 
 		query := fmt.Sprintf(`SELECT * FROM "%s"."%s" WHERE "%s" = $1`, schemaName, tableName, pkName)
-		
+
 		rows, err := r.db.QueryContext(p.Context, query, id)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("query failed")
 		}
 		defer rows.Close()
 
 		results, err := r.scanRows(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to read results")
 		}
 
 		if len(results) == 0 {
@@ -88,12 +120,24 @@ func (r *Resolver) ResolveGet(schemaName, tableName string, pkName string) graph
 // ResolveCreate returns a function that inserts a new record
 func (r *Resolver) ResolveCreate(schemaName, tableName string, columns []string) graphql.FieldResolveFn {
 	return func(p graphql.ResolveParams) (interface{}, error) {
+		// Validate identifiers to prevent SQL injection
+		if err := validateIdentifier(schemaName); err != nil {
+			return nil, fmt.Errorf("invalid schema name")
+		}
+		if err := validateIdentifier(tableName); err != nil {
+			return nil, fmt.Errorf("invalid table name")
+		}
+
 		var cols []string
 		var vals []interface{}
 		var placeholders []string
-		
+
 		argIdx := 1
 		for _, col := range columns {
+			// Validate column name
+			if err := validateIdentifier(col); err != nil {
+				continue // Skip invalid column names
+			}
 			// Convert column name (snake_case) to argument name (camelCase)
 			argName := strcase.ToLowerCamel(col)
 			if val, ok := p.Args[argName]; ok {
@@ -117,13 +161,13 @@ func (r *Resolver) ResolveCreate(schemaName, tableName string, columns []string)
 
 		rows, err := r.db.QueryContext(p.Context, query, vals...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("insert failed")
 		}
 		defer rows.Close()
 
 		results, err := r.scanRows(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to read results")
 		}
 
 		if len(results) == 0 {
