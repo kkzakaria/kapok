@@ -4,6 +4,7 @@
 BINARY_NAME=kapok
 GATEWAY_BINARY=kapok-gateway
 CLI_BINARY=kapok-cli
+CONTROL_PLANE_BINARY=kapok-control-plane
 VERSION?=0.1.0
 BUILD_DIR=bin
 GO=go
@@ -23,7 +24,7 @@ help: ## Show this help
 # Build
 # =============================================================================
 
-build: build-gateway build-cli ## Build all binaries
+build: build-gateway build-cli build-control-plane ## Build all binaries
 
 build-gateway: ## Build gateway binary
 	@echo "$(YELLOW)Building gateway...$(NC)"
@@ -34,6 +35,11 @@ build-cli: ## Build CLI binary
 	@echo "$(YELLOW)Building CLI...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build -ldflags="-s -w -X main.Version=$(VERSION)" -o $(BUILD_DIR)/$(CLI_BINARY) ./cmd/cli
+
+build-control-plane: ## Build control-plane binary
+	@echo "$(YELLOW)Building control-plane...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	$(GO) build -ldflags="-s -w -X main.Version=$(VERSION)" -o $(BUILD_DIR)/$(CONTROL_PLANE_BINARY) ./cmd/control-plane
 
 # =============================================================================
 # Run
