@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +12,18 @@ import (
 	"github.com/kapok/kapok/internal/database"
 	"github.com/rs/zerolog"
 )
+
+var nonAlphanumDash = regexp.MustCompile(`[^a-z0-9-]+`)
+var multiDash = regexp.MustCompile(`-{2,}`)
+
+// slugify converts a name to a URL-safe slug.
+func slugify(name string) string {
+	s := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	s = nonAlphanumDash.ReplaceAllString(s, "")
+	s = multiDash.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
 
 // Provisioner handles tenant provisioning operations
 type Provisioner struct {
@@ -47,8 +60,8 @@ func (p *Provisioner) CreateTenant(ctx context.Context, name string) (*Tenant, e
 	tenantID := uuid.New().String()
 	schemaName := GenerateSchemaName(tenantID)
 
-	// Generate slug from name
-	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	// Generate slug from name: lowercase, replace spaces with dashes, strip non-alphanumeric
+	slug := slugify(name)
 
 	// Create tenant object
 	tenant := &Tenant{

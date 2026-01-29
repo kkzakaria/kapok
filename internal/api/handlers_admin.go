@@ -14,14 +14,22 @@ func Stats(deps *Dependencies) http.HandlerFunc {
 		ctx := r.Context()
 
 		var totalTenants, activeTenants int
-		_ = deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tenants`).Scan(&totalTenants)
-		_ = deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tenants WHERE status = 'active'`).Scan(&activeTenants)
+		if err := deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tenants`).Scan(&totalTenants); err != nil {
+			deps.Logger.Error().Err(err).Msg("failed to count tenants")
+		}
+		if err := deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tenants WHERE status = 'active'`).Scan(&activeTenants); err != nil {
+			deps.Logger.Error().Err(err).Msg("failed to count active tenants")
+		}
 
 		var totalStorageBytes int64
-		_ = deps.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(storage_used_bytes), 0) FROM tenants`).Scan(&totalStorageBytes)
+		if err := deps.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(storage_used_bytes), 0) FROM tenants`).Scan(&totalStorageBytes); err != nil {
+			deps.Logger.Error().Err(err).Msg("failed to sum storage bytes")
+		}
 
 		var totalQueriesToday int
-		_ = deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log WHERE timestamp > CURRENT_DATE`).Scan(&totalQueriesToday)
+		if err := deps.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log WHERE timestamp > CURRENT_DATE`).Scan(&totalQueriesToday); err != nil {
+			deps.Logger.Warn().Err(err).Msg("failed to count today's queries (audit_log may not exist)")
+		}
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"total_tenants":      totalTenants,

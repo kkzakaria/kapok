@@ -176,8 +176,8 @@ RESP=$(curl -s -w "\n%{http_code}" "$API/api/v1/admin/metrics?range=24h" -H "$(a
 BODY=$(echo "$RESP" | head -n -1)
 HTTP=$(echo "$RESP" | tail -1)
 assert_status "GET /admin/metrics → 200" 200 "$HTTP"
-assert_json_field "Metrics has range" "$BODY" "range"
-assert_json_field "Metrics has metrics" "$BODY" "metrics"
+assert_json_field "Metrics has throughput" "$BODY" "throughput"
+assert_json_field "Metrics has query_latency_p50" "$BODY" "query_latency_p50"
 
 # ═════════════════════════════════════════════════════════════════════════════
 echo -e "\n${YELLOW}━━━ EPIC 6: GraphQL Proxy ━━━${NC}"

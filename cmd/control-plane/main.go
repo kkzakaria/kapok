@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,6 +45,8 @@ func main() {
 	serverHost := envOr("KAPOK_SERVER_HOST", "0.0.0.0")
 	serverPort := envInt("KAPOK_SERVER_PORT", 8080)
 
+	corsOrigins := strings.Split(envOr("KAPOK_CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:5173"), ",")
+
 	// Connect to database
 	db, err := database.NewDB(ctx, dbCfg, log.Logger)
 	if err != nil {
@@ -73,6 +76,7 @@ func main() {
 		Provisioner: tenant.NewProvisioner(db, log.Logger),
 		GQLHandler:  gql.NewHandler(db, log.Logger),
 		Logger:      log.Logger,
+		CORSOrigins: corsOrigins,
 	}
 
 	router := api.NewRouter(deps)
@@ -160,7 +164,12 @@ func seedAdminUser(ctx context.Context, db *database.DB) error {
 		return nil
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	adminPassword := envOr("KAPOK_ADMIN_PASSWORD", "admin")
+	if adminPassword == "admin" {
+		log.Warn().Msg("using default admin password — set KAPOK_ADMIN_PASSWORD for production")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -170,6 +179,6 @@ func seedAdminUser(ctx context.Context, db *database.DB) error {
 		VALUES ($1, $2, $3)
 	`, "admin@kapok.dev", string(hash), "admin")
 
-	log.Info().Msg("seeded admin user: admin@kapok.dev / admin")
+	log.Info().Msg("seeded admin user: admin@kapok.dev")
 	return err
 }

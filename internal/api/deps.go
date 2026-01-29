@@ -15,4 +15,5 @@ type Dependencies struct {
 	Provisioner *tenant.Provisioner
 	GQLHandler  *gql.Handler
 	Logger      zerolog.Logger
+	CORSOrigins []string
 }

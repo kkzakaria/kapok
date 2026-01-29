@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type contextKeyType string
@@ -24,7 +23,7 @@ func NewRouter(deps *Dependencies) http.Handler {
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.RealIP)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:3001", "http://localhost:5173"},
+		AllowedOrigins:   deps.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -45,13 +44,16 @@ func NewRouter(deps *Dependencies) http.Handler {
 
 		r.Get("/api/v1/auth/me", Me(deps))
 
-		// Admin
-		r.Get("/api/v1/admin/stats", Stats(deps))
-		r.Get("/api/v1/admin/tenants", ListTenants(deps))
-		r.Get("/api/v1/admin/tenants/{id}", GetTenant(deps))
-		r.Post("/api/v1/admin/tenants", CreateTenant(deps))
-		r.Delete("/api/v1/admin/tenants/{id}", DeleteTenant(deps))
-		r.Get("/api/v1/admin/metrics", Metrics(deps))
+		// Admin (requires admin role)
+		r.Group(func(r chi.Router) {
+			r.Use(RequireRole("admin"))
+			r.Get("/api/v1/admin/stats", Stats(deps))
+			r.Get("/api/v1/admin/tenants", ListTenants(deps))
+			r.Get("/api/v1/admin/tenants/{id}", GetTenant(deps))
+			r.Post("/api/v1/admin/tenants", CreateTenant(deps))
+			r.Delete("/api/v1/admin/tenants/{id}", DeleteTenant(deps))
+			r.Get("/api/v1/admin/metrics", Metrics(deps))
+		})
 
 		// GraphQL proxy
 		r.Post("/api/v1/tenants/{tenantId}/graphql", GraphQLProxy(deps))
@@ -83,5 +85,42 @@ func AuthMiddleware(deps *Dependencies) func(http.Handler) http.Handler {
 	}
 }
 
-// suppress unused import warning
-var _ jwt.MapClaims
+// RequireRole returns middleware that checks the JWT claims for the given role.
+func RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(claimsContextKey).(map[string]interface{})
+			if !ok {
+				errorResponse(w, http.StatusForbidden, "forbidden")
+				return
+			}
+
+			if hasRole(claims, role) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			errorResponse(w, http.StatusForbidden, "forbidden: requires "+role+" role")
+		})
+	}
+}
+
+func hasRole(claims map[string]interface{}, role string) bool {
+	// Check []interface{} format (JSON array from JWT)
+	if roles, ok := claims["roles"].([]interface{}); ok {
+		for _, v := range roles {
+			if s, ok := v.(string); ok && s == role {
+				return true
+			}
+		}
+	}
+	// Check string format (comma-separated)
+	if rolesStr, ok := claims["roles"].(string); ok {
+		for _, v := range strings.Split(rolesStr, ",") {
+			if strings.TrimSpace(v) == role {
+				return true
+			}
+		}
+	}
+	return false
+}
