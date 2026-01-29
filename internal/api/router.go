@@ -53,6 +53,13 @@ func NewRouter(deps *Dependencies) http.Handler {
 			r.Post("/api/v1/admin/tenants", CreateTenant(deps))
 			r.Delete("/api/v1/admin/tenants/{id}", DeleteTenant(deps))
 			r.Get("/api/v1/admin/metrics", Metrics(deps))
+
+			// Backup routes
+			r.Post("/api/v1/admin/tenants/{id}/backups", TriggerBackup(deps))
+			r.Get("/api/v1/admin/tenants/{id}/backups", ListBackups(deps))
+			r.Get("/api/v1/admin/backups/{backupId}", GetBackup(deps))
+			r.Post("/api/v1/admin/backups/{backupId}/restore", RestoreBackup(deps))
+			r.Delete("/api/v1/admin/backups/{backupId}", DeleteBackup(deps))
 		})
 
 		// GraphQL proxy
