@@ -1,8 +1,9 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kapok/kapok/internal/backup"
@@ -19,7 +20,7 @@ func TriggerBackup(deps *Dependencies) http.HandlerFunc {
 			`SELECT schema_name FROM tenants WHERE id = $1`, tenantID,
 		).Scan(&schemaName)
 		if err != nil {
-			if strings.Contains(err.Error(), "no rows") {
+			if errors.Is(err, sql.ErrNoRows) {
 				errorResponse(w, http.StatusNotFound, "tenant not found")
 				return
 			}
@@ -60,7 +61,7 @@ func GetBackup(deps *Dependencies) http.HandlerFunc {
 		backupID := chi.URLParam(r, "backupId")
 		b, err := deps.BackupService.GetRepository().GetByID(r.Context(), backupID)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, backup.ErrBackupNotFound) {
 				errorResponse(w, http.StatusNotFound, "backup not found")
 				return
 			}
@@ -76,7 +77,7 @@ func RestoreBackup(deps *Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		backupID := chi.URLParam(r, "backupId")
 		if err := deps.BackupService.RestoreBackup(r.Context(), backupID); err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, backup.ErrBackupNotFound) {
 				errorResponse(w, http.StatusNotFound, "backup not found")
 				return
 			}
@@ -93,7 +94,7 @@ func DeleteBackup(deps *Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		backupID := chi.URLParam(r, "backupId")
 		if err := deps.BackupService.DeleteBackup(r.Context(), backupID); err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, backup.ErrBackupNotFound) {
 				errorResponse(w, http.StatusNotFound, "backup not found")
 				return
 			}

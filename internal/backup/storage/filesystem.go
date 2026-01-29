@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FilesystemStore implements Store using the local filesystem.
@@ -15,18 +16,34 @@ type FilesystemStore struct {
 
 // NewFilesystemStore creates a new filesystem-backed store.
 func NewFilesystemStore(basePath string) (*FilesystemStore, error) {
-	if err := os.MkdirAll(basePath, 0o750); err != nil {
+	abs, err := filepath.Abs(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve storage path: %w", err)
+	}
+	if err := os.MkdirAll(abs, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
-	return &FilesystemStore{basePath: basePath}, nil
+	return &FilesystemStore{basePath: abs}, nil
 }
 
-func (s *FilesystemStore) fullPath(key string) string {
-	return filepath.Join(s.basePath, key)
+func (s *FilesystemStore) fullPath(key string) (string, error) {
+	p := filepath.Join(s.basePath, key)
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+	// Ensure the resolved path stays within basePath to prevent path traversal.
+	if !strings.HasPrefix(abs, s.basePath+string(filepath.Separator)) && abs != s.basePath {
+		return "", fmt.Errorf("path traversal detected: %s escapes base %s", key, s.basePath)
+	}
+	return abs, nil
 }
 
 func (s *FilesystemStore) Upload(_ context.Context, key string, r io.Reader) error {
-	p := s.fullPath(key)
+	p, err := s.fullPath(key)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return fmt.Errorf("failed to create parent dirs: %w", err)
 	}
@@ -43,7 +60,11 @@ func (s *FilesystemStore) Upload(_ context.Context, key string, r io.Reader) err
 }
 
 func (s *FilesystemStore) Download(_ context.Context, key string) (io.ReadCloser, error) {
-	f, err := os.Open(s.fullPath(key))
+	p, err := s.fullPath(key)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -51,14 +72,22 @@ func (s *FilesystemStore) Download(_ context.Context, key string) (io.ReadCloser
 }
 
 func (s *FilesystemStore) Delete(_ context.Context, key string) error {
-	if err := os.Remove(s.fullPath(key)); err != nil && !os.IsNotExist(err) {
+	p, err := s.fullPath(key)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete file: %w", err)
 	}
 	return nil
 }
 
 func (s *FilesystemStore) Exists(_ context.Context, key string) (bool, error) {
-	_, err := os.Stat(s.fullPath(key))
+	p, err := s.fullPath(key)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(p)
 	if err == nil {
 		return true, nil
 	}

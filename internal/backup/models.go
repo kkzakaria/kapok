@@ -1,8 +1,14 @@
 package backup
 
 import (
+	"errors"
 	"fmt"
 	"time"
+)
+
+// Sentinel errors for the backup package.
+var (
+	ErrBackupNotFound = errors.New("backup not found")
 )
 
 // Backup status constants

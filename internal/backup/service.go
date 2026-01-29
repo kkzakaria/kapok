@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
 	"github.com/kapok/kapok/internal/backup/storage"
 	"github.com/kapok/kapok/internal/database"
+	"github.com/kapok/kapok/internal/observability"
 	"github.com/rs/zerolog"
 )
+
+// maxConcurrentBackups limits parallel backup goroutines to avoid resource exhaustion.
+const maxConcurrentBackups = 4
 
 // Service is the core backup orchestrator.
 type Service struct {
@@ -20,18 +25,26 @@ type Service struct {
 	encryptionKey []byte // 32 bytes for AES-256; nil means no encryption
 	logger        zerolog.Logger
 	retentionDays int
+	sem           chan struct{} // semaphore to bound concurrent backups
+	metrics       *observability.MetricsCollector
 }
 
 // NewService creates a new backup service.
-func NewService(db *database.DB, store storage.Store, encryptionKey []byte, retentionDays int, logger zerolog.Logger) *Service {
-	return &Service{
+// The metrics parameter is optional; pass nil to disable Prometheus instrumentation.
+func NewService(db *database.DB, store storage.Store, encryptionKey []byte, retentionDays int, logger zerolog.Logger, metrics ...*observability.MetricsCollector) *Service {
+	s := &Service{
 		repo:          NewRepository(db),
 		store:         store,
 		db:            db,
 		encryptionKey: encryptionKey,
 		logger:        logger,
 		retentionDays: retentionDays,
+		sem:           make(chan struct{}, maxConcurrentBackups),
 	}
+	if len(metrics) > 0 && metrics[0] != nil {
+		s.metrics = metrics[0]
+	}
+	return s
 }
 
 // GetRepository exposes the repository for API handlers.
@@ -68,8 +81,12 @@ func (s *Service) CreateBackup(ctx context.Context, tenantID, schemaName, trigge
 		return nil, err
 	}
 
-	// Run async
-	go s.executeBackup(b)
+	// Run async with bounded concurrency
+	go func() {
+		s.sem <- struct{}{}
+		defer func() { <-s.sem }()
+		s.executeBackup(b)
+	}()
 	return b, nil
 }
 
@@ -84,11 +101,12 @@ func (s *Service) executeBackup(b *Backup) {
 	}
 
 	// pg_dump
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+	connStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
 		s.db.Config().Host, s.db.Config().Port, s.db.Config().User,
-		s.db.Config().Password, s.db.Config().Database, s.db.Config().SSLMode)
+		s.db.Config().Database, s.db.Config().SSLMode)
 
-	cmd := exec.CommandContext(ctx, "pg_dump", "--schema="+b.SchemaName, "--no-owner", "--no-acl", connStr)
+	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname="+connStr, "--schema="+b.SchemaName, "--no-owner", "--no-acl")
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+s.db.Config().Password)
 	dumpOut, err := cmd.Output()
 	if err != nil {
 		s.failBackup(ctx, b, fmt.Sprintf("pg_dump failed: %v", err))
@@ -131,17 +149,28 @@ func (s *Service) executeBackup(b *Backup) {
 		return
 	}
 
+	duration := time.Since(now).Seconds()
 	s.logger.Info().
 		Str("backup_id", b.ID).
 		Str("tenant_id", b.TenantID).
 		Int("size_bytes", uploadData.Len()).
 		Msg("backup completed")
+
+	if s.metrics != nil {
+		s.metrics.BackupsTotal.WithLabelValues(b.TenantID, StatusCompleted, b.Trigger).Inc()
+		s.metrics.BackupDuration.WithLabelValues(b.TenantID).Observe(duration)
+		s.metrics.BackupSizeBytes.WithLabelValues(b.TenantID).Observe(float64(uploadData.Len()))
+		s.metrics.LastBackupTimestamp.WithLabelValues(b.TenantID).SetToCurrentTime()
+	}
 }
 
 func (s *Service) failBackup(ctx context.Context, b *Backup, errMsg string) {
 	s.logger.Error().Str("backup_id", b.ID).Msg(errMsg)
 	if err := s.repo.UpdateStatus(ctx, b.ID, StatusFailed, errMsg); err != nil {
 		s.logger.Error().Err(err).Msg("failed to update backup failure status")
+	}
+	if s.metrics != nil {
+		s.metrics.BackupsTotal.WithLabelValues(b.TenantID, StatusFailed, b.Trigger).Inc()
 	}
 }
 
@@ -150,6 +179,10 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string) error {
 	b, err := s.repo.GetByID(ctx, backupID)
 	if err != nil {
 		return err
+	}
+
+	if b.Encrypted && len(s.encryptionKey) != 32 {
+		return fmt.Errorf("backup is encrypted but no valid encryption key is configured")
 	}
 
 	if err := s.repo.UpdateStatus(ctx, b.ID, StatusRestoring, ""); err != nil {
@@ -170,6 +203,29 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string) error {
 		return err
 	}
 
+	// Verify checksum (computed on compressed data, before encryption during backup)
+	if b.Checksum != "" {
+		var verifyData []byte
+		if b.Encrypted {
+			// For encrypted backups, we need to decrypt first to get compressed data for checksum.
+			// The checksum was computed on compressed data before encryption.
+			// We'll verify after decryption below.
+		} else {
+			verifyData = raw.Bytes()
+		}
+		if verifyData != nil {
+			got, err := Checksum(bytes.NewReader(verifyData))
+			if err != nil {
+				s.failBackup(ctx, b, fmt.Sprintf("checksum computation failed: %v", err))
+				return fmt.Errorf("checksum computation failed: %w", err)
+			}
+			if got != b.Checksum {
+				s.failBackup(ctx, b, "checksum mismatch: backup data may be corrupted")
+				return fmt.Errorf("checksum mismatch: expected %s, got %s", b.Checksum, got)
+			}
+		}
+	}
+
 	// Decrypt
 	var decrypted bytes.Buffer
 	if b.Encrypted {
@@ -181,6 +237,19 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string) error {
 		decrypted = raw
 	}
 
+	// Verify checksum for encrypted backups (checksum is on compressed data = decrypted output)
+	if b.Checksum != "" && b.Encrypted {
+		got, err := Checksum(bytes.NewReader(decrypted.Bytes()))
+		if err != nil {
+			s.failBackup(ctx, b, fmt.Sprintf("checksum computation failed: %v", err))
+			return fmt.Errorf("checksum computation failed: %w", err)
+		}
+		if got != b.Checksum {
+			s.failBackup(ctx, b, "checksum mismatch: backup data may be corrupted or tampered")
+			return fmt.Errorf("checksum mismatch: expected %s, got %s", b.Checksum, got)
+		}
+	}
+
 	// Decompress
 	var sqlData bytes.Buffer
 	if err := Decompress(&sqlData, bytes.NewReader(decrypted.Bytes())); err != nil {
@@ -189,11 +258,12 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string) error {
 	}
 
 	// pg_restore via psql (schema-level SQL dump)
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+	connStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
 		s.db.Config().Host, s.db.Config().Port, s.db.Config().User,
-		s.db.Config().Password, s.db.Config().Database, s.db.Config().SSLMode)
+		s.db.Config().Database, s.db.Config().SSLMode)
 
-	cmd := exec.CommandContext(ctx, "psql", connStr)
+	cmd := exec.CommandContext(ctx, "psql", "--dbname="+connStr)
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+s.db.Config().Password)
 	cmd.Stdin = bytes.NewReader(sqlData.Bytes())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		errMsg := fmt.Sprintf("psql restore failed: %v: %s", err, string(out))
@@ -206,6 +276,9 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string) error {
 	}
 
 	s.logger.Info().Str("backup_id", b.ID).Str("tenant_id", b.TenantID).Msg("restore completed")
+	if s.metrics != nil {
+		s.metrics.RestoresTotal.WithLabelValues(b.TenantID, StatusCompleted).Inc()
+	}
 	return nil
 }
 

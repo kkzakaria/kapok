@@ -47,7 +47,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Backup, error) {
 		&b.StartedAt, &b.CompletedAt, &b.ExpiresAt, &b.CreatedAt, &b.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("backup not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", ErrBackupNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get backup: %w", err)
@@ -74,11 +74,15 @@ func (r *Repository) ListByTenant(ctx context.Context, tenantID string, limit, o
 
 // UpdateStatus sets the status and optionally the error message.
 func (r *Repository) UpdateStatus(ctx context.Context, id, status, errMsg string) error {
-	_, err := r.db.ExecContext(ctx, `
+	res, err := r.db.ExecContext(ctx, `
 		UPDATE backups SET status = $1, error_message = $2, updated_at = NOW() WHERE id = $3
 	`, status, errMsg, id)
 	if err != nil {
 		return fmt.Errorf("failed to update backup status: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("%w: %s", ErrBackupNotFound, id)
 	}
 	return nil
 }
@@ -98,9 +102,13 @@ func (r *Repository) UpdateCompleted(ctx context.Context, id string, sizeBytes i
 
 // Delete removes a backup record.
 func (r *Repository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM backups WHERE id = $1`, id)
+	res, err := r.db.ExecContext(ctx, `DELETE FROM backups WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete backup: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("%w: %s", ErrBackupNotFound, id)
 	}
 	return nil
 }

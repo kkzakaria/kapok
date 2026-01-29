@@ -1,12 +1,17 @@
 package backup
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	bk "github.com/kapok/kapok/internal/backup"
+	"github.com/kapok/kapok/internal/backup/storage"
 	"github.com/kapok/kapok/internal/database"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -55,6 +60,45 @@ func loadDBConfig() (database.Config, error) {
 	}
 
 	return dbConfig, nil
+}
+
+// newBackupService creates a configured backup service from environment/config.
+// This consolidates the shared boilerplate across CLI subcommands.
+func newBackupService(ctx context.Context) (*bk.Service, *database.DB, error) {
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+
+	dbConfig, err := loadDBConfig()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	db, err := database.NewDB(ctx, dbConfig, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	storagePath := os.Getenv("KAPOK_BACKUP_STORAGE_PATH")
+	if storagePath == "" {
+		storagePath = "./backups"
+	}
+
+	store, err := storage.NewFilesystemStore(storagePath)
+	if err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("failed to create storage: %w", err)
+	}
+
+	var encKey []byte
+	if keyHex := os.Getenv("KAPOK_BACKUP_ENCRYPTION_KEY"); keyHex != "" {
+		encKey, err = hex.DecodeString(keyHex)
+		if err != nil || len(encKey) != 32 {
+			db.Close()
+			return nil, nil, fmt.Errorf("KAPOK_BACKUP_ENCRYPTION_KEY must be 64 hex chars (32 bytes)")
+		}
+	}
+
+	svc := bk.NewService(db, store, encKey, 30, logger)
+	return svc, db, nil
 }
 
 // NewBackupCommand creates the backup root command.
