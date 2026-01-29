@@ -11,16 +11,20 @@ import (
 
 // ChartConfig holds all configuration for Helm chart generation.
 type ChartConfig struct {
-	ReleaseName  string
-	Namespace    string
-	Cloud        CloudProvider
-	Domain       string
-	TLSEnabled   bool
-	HPAEnabled   bool
-	KEDAEnabled  bool
-	ImageTag     string
-	StorageClass string
-	IngressClass string
+	ReleaseName          string
+	Namespace            string
+	Cloud                CloudProvider
+	Domain               string
+	TLSEnabled           bool
+	HPAEnabled           bool
+	KEDAEnabled          bool
+	ObservabilityEnabled bool
+	ImageTag             string
+	StorageClass         string
+	IngressClass         string
+	GrafanaPassword      string
+	SlackWebhook         string
+	PagerDutyKey         string
 }
 
 // subchartMeta describes a subchart to generate.
@@ -78,6 +82,37 @@ func (g *HelmChartGenerator) GenerateCharts(outputDir string, cfg ChartConfig) e
 	if cfg.KEDAEnabled {
 		if err := writeRaw(filepath.Join(tmplDir, "keda-scaled-object.yaml"), KEDAScaledObjectYAML); err != nil {
 			return fmt.Errorf("failed to write keda-scaled-object.yaml: %w", err)
+		}
+	}
+
+	// Observability subchart
+	if cfg.ObservabilityEnabled {
+		obsDir := filepath.Join(root, "charts", "observability")
+		obsTmplDir := filepath.Join(obsDir, "templates")
+
+		if err := writeRaw(filepath.Join(obsDir, "Chart.yaml"), ObservabilityChartYAML); err != nil {
+			return fmt.Errorf("failed to write observability Chart.yaml: %w", err)
+		}
+		if err := writeGoTemplate(filepath.Join(obsDir, "values.yaml"),
+			PrometheusValuesYAML+"\n"+LokiValuesYAML+"\n"+JaegerValuesYAML+"\n"+GrafanaValuesYAML+"\n"+AlertManagerConfigYAML, cfg); err != nil {
+			return fmt.Errorf("failed to write observability values.yaml: %w", err)
+		}
+		if err := writeRaw(filepath.Join(obsTmplDir, "alert-rules.yaml"), AlertRulesYAML); err != nil {
+			return fmt.Errorf("failed to write alert-rules.yaml: %w", err)
+		}
+
+		// Write dashboard ConfigMaps
+		dashboards := map[string]string{
+			"platform-overview.json": DashboardPlatformOverview,
+			"per-tenant.json":       DashboardPerTenant,
+			"graphql.json":          DashboardGraphQL,
+			"infrastructure.json":   DashboardInfrastructure,
+		}
+		dashDir := filepath.Join(obsTmplDir, "dashboards")
+		for name, content := range dashboards {
+			if err := writeRaw(filepath.Join(dashDir, name), content); err != nil {
+				return fmt.Errorf("failed to write dashboard %s: %w", name, err)
+			}
 		}
 	}
 

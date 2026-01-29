@@ -11,16 +11,20 @@ import (
 
 // Options holds deploy command options.
 type Options struct {
-	Cloud     string
-	Namespace string
-	Domain    string
-	TLS       bool
-	HPA       bool
-	KEDA      bool
-	ImageTag  string
-	OutputDir string
-	DryRun    bool
-	Timeout   string
+	Cloud                string
+	Namespace            string
+	Domain               string
+	TLS                  bool
+	HPA                  bool
+	KEDA                 bool
+	Observability        bool
+	ImageTag             string
+	OutputDir            string
+	DryRun               bool
+	Timeout              string
+	GrafanaPassword      string
+	SlackWebhook         string
+	PagerDutyKey         string
 }
 
 // Deployer orchestrates detect → generate → install → monitor.
@@ -42,16 +46,20 @@ func (d *Deployer) Run(opts Options) error {
 	// 2. Build chart config
 	cloudCfg := k8s.CloudConfigFor(cloud)
 	chartCfg := k8s.ChartConfig{
-		ReleaseName:  "kapok",
-		Namespace:    opts.Namespace,
-		Cloud:        cloud,
-		Domain:       opts.Domain,
-		TLSEnabled:   opts.TLS,
-		HPAEnabled:   opts.HPA,
-		KEDAEnabled:  opts.KEDA,
-		ImageTag:     opts.ImageTag,
-		StorageClass: cloudCfg.StorageClass,
-		IngressClass: cloudCfg.IngressClass,
+		ReleaseName:          "kapok",
+		Namespace:            opts.Namespace,
+		Cloud:                cloud,
+		Domain:               opts.Domain,
+		TLSEnabled:           opts.TLS,
+		HPAEnabled:           opts.HPA,
+		KEDAEnabled:          opts.KEDA,
+		ObservabilityEnabled: opts.Observability,
+		ImageTag:             opts.ImageTag,
+		StorageClass:         cloudCfg.StorageClass,
+		IngressClass:         cloudCfg.IngressClass,
+		GrafanaPassword:      opts.GrafanaPassword,
+		SlackWebhook:         opts.SlackWebhook,
+		PagerDutyKey:         opts.PagerDutyKey,
 	}
 
 	// 3. Generate charts
@@ -73,6 +81,13 @@ func (d *Deployer) Run(opts Options) error {
 
 	if opts.DryRun {
 		log.Info().Str("output_dir", outputDir).Msg("dry run complete, charts generated")
+		if opts.Observability {
+			log.Info().
+				Str("grafana_url", fmt.Sprintf("http://%s/grafana", opts.Domain)).
+				Str("prometheus_url", fmt.Sprintf("http://%s/prometheus", opts.Domain)).
+				Str("jaeger_url", fmt.Sprintf("http://%s/jaeger", opts.Domain)).
+				Msg("observability stack endpoints")
+		}
 		return nil
 	}
 
