@@ -194,16 +194,18 @@ function DeleteTenantModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [confirmName, setConfirmName] = useState("");
+  const [error, setError] = useState("");
 
   async function handleDelete() {
     if (!tenant) return;
     setLoading(true);
+    setError("");
     try {
       await api.deleteTenant(tenant.id);
       setConfirmName("");
       onDeleted();
-    } catch {
-      // error handled silently
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete tenant");
     } finally {
       setLoading(false);
     }
@@ -214,10 +216,14 @@ function DeleteTenantModal({
       open={!!tenant}
       onClose={() => {
         setConfirmName("");
+        setError("");
         onClose();
       }}
       title="Delete Tenant"
     >
+      {error && (
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+      )}
       <p className="text-sm text-gray-600">
         This action cannot be undone. All data for tenant{" "}
         <strong>{tenant?.name}</strong> will be permanently deleted.

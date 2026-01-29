@@ -53,7 +53,7 @@ export default function MetricsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load metrics");
     }
-  }, REFRESH_INTERVAL);
+  }, REFRESH_INTERVAL, [timeRange]);
 
   return (
     <Shell>

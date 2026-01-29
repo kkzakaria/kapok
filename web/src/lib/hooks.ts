@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export function useInterval(callback: () => void, delayMs: number) {
+export function useInterval(
+  callback: () => void,
+  delayMs: number,
+  deps: unknown[] = [],
+) {
   const savedCallback = useRef(callback);
 
   useEffect(() => {
@@ -14,7 +18,8 @@ export function useInterval(callback: () => void, delayMs: number) {
     tick();
     const id = setInterval(tick, delayMs);
     return () => clearInterval(id);
-  }, [delayMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delayMs, ...deps]);
 }
 
 export function useAsync<T>(
@@ -24,12 +29,17 @@ export function useAsync<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
+  const fnRef = useRef(fn);
+
+  useEffect(() => {
+    fnRef.current = fn;
+  });
 
   const execute = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fn();
+      const result = await fnRef.current();
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
