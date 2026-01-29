@@ -39,6 +39,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/glebarez/sqlite v1.11.0 // indirect
+	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
@@ -51,14 +52,24 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
+	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/microsoft/go-mssqldb v1.9.5 // indirect
+	github.com/minio/crc64nvme v1.1.1 // indirect
+	github.com/minio/md5-simd v1.1.2 // indirect
+	github.com/minio/minio-go/v7 v7.0.98 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rs/xid v1.6.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/tinylib/msgp v1.6.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.39.0 // indirect
 	go.opentelemetry.io/otel/metric v1.39.0 // indirect

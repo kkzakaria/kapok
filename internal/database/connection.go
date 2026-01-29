@@ -178,6 +178,11 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 	return tx, nil
 }
 
+// Config returns the database configuration.
+func (db *DB) Config() Config {
+	return db.config
+}
+
 // Close closes the database connection
 func (db *DB) Close() error {
 	db.logger.Info().Msg("closing database connection")

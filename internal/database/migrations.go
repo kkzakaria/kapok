@@ -141,6 +141,62 @@ func (m *Migrator) CreateControlDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to create users table: %w", err)
 	}
 
+	// Create backups table
+	_, err = tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS backups (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id),
+			schema_name VARCHAR(100) NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending',
+			type VARCHAR(20) NOT NULL DEFAULT 'schema',
+			trigger VARCHAR(20) NOT NULL DEFAULT 'manual',
+			storage_path TEXT NOT NULL DEFAULT '',
+			size_bytes BIGINT NOT NULL DEFAULT 0,
+			checksum VARCHAR(64) NOT NULL DEFAULT '',
+			encrypted BOOLEAN NOT NULL DEFAULT false,
+			compressed BOOLEAN NOT NULL DEFAULT false,
+			error_message TEXT NOT NULL DEFAULT '',
+			started_at TIMESTAMP,
+			completed_at TIMESTAMP,
+			expires_at TIMESTAMP,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create backups table: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_backups_tenant ON backups(tenant_id, created_at DESC)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create backups tenant index: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_backups_expires ON backups(expires_at) WHERE expires_at IS NOT NULL
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create backups expires index: %w", err)
+	}
+
+	// Create backup_schedules table
+	_, err = tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS backup_schedules (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id),
+			cron_expr VARCHAR(100) NOT NULL,
+			enabled BOOLEAN NOT NULL DEFAULT true,
+			retention_days INT NOT NULL DEFAULT 30,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create backup_schedules table: %w", err)
+	}
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
