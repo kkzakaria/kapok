@@ -196,6 +196,10 @@ data:
               description: "No database queries processed in the last minute"
 `
 
+// ObservabilityValuesYAML is the combined values template for the observability subchart.
+// Using a single constant avoids fragile string concatenation.
+var ObservabilityValuesYAML = PrometheusValuesYAML + "\n" + LokiValuesYAML + "\n" + JaegerValuesYAML + "\n" + GrafanaValuesYAML + "\n" + AlertManagerConfigYAML
+
 // ObservabilityChartYAML is the Chart.yaml for the observability subchart.
 const ObservabilityChartYAML = `apiVersion: v2
 name: observability

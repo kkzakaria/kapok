@@ -94,7 +94,7 @@ func (g *HelmChartGenerator) GenerateCharts(outputDir string, cfg ChartConfig) e
 			return fmt.Errorf("failed to write observability Chart.yaml: %w", err)
 		}
 		if err := writeGoTemplate(filepath.Join(obsDir, "values.yaml"),
-			PrometheusValuesYAML+"\n"+LokiValuesYAML+"\n"+JaegerValuesYAML+"\n"+GrafanaValuesYAML+"\n"+AlertManagerConfigYAML, cfg); err != nil {
+			ObservabilityValuesYAML, cfg); err != nil {
 			return fmt.Errorf("failed to write observability values.yaml: %w", err)
 		}
 		if err := writeRaw(filepath.Join(obsTmplDir, "alert-rules.yaml"), AlertRulesYAML); err != nil {

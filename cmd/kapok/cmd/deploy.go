@@ -41,7 +41,7 @@ func init() {
 	deployCmd.Flags().String("context", "", "Kubeconfig context name for cloud detection")
 	deployCmd.Flags().String("timeout", "10m", "Helm deploy timeout (e.g. 5m, 15m)")
 	deployCmd.Flags().Bool("observability", true, "Enable observability stack (Prometheus, Grafana, Loki, Jaeger)")
-	deployCmd.Flags().String("grafana-password", "admin", "Grafana admin password")
+	deployCmd.Flags().String("grafana-password", "", "Grafana admin password (required when --observability is enabled)")
 	deployCmd.Flags().String("slack-webhook", "", "Slack webhook URL for alert notifications")
 	deployCmd.Flags().String("pagerduty-key", "", "PagerDuty service key for critical alerts")
 }

@@ -130,12 +130,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log format: %s (must be json or console)", c.Log.Format)
 	}
 
-	// Observability validation
-	if c.Observability.MetricsPort < 1 || c.Observability.MetricsPort > 65535 {
-		return fmt.Errorf("invalid observability metrics port: %d (must be 1-65535)", c.Observability.MetricsPort)
-	}
-	if c.Observability.SampleRate < 0 || c.Observability.SampleRate > 1 {
-		return fmt.Errorf("invalid tracing sample rate: %f (must be 0.0-1.0)", c.Observability.SampleRate)
+	// Observability validation (only when enabled)
+	if c.Observability.Enabled {
+		if c.Observability.MetricsPort < 1 || c.Observability.MetricsPort > 65535 {
+			return fmt.Errorf("invalid observability metrics port: %d (must be 1-65535)", c.Observability.MetricsPort)
+		}
+		if c.Observability.SampleRate < 0 || c.Observability.SampleRate > 1 {
+			return fmt.Errorf("invalid tracing sample rate: %f (must be 0.0-1.0)", c.Observability.SampleRate)
+		}
 	}
 
 	return nil

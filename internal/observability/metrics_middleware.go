@@ -5,31 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/kapok/kapok/internal/tenant"
 	"github.com/rs/zerolog"
 )
-
-// responseWriter wraps http.ResponseWriter to capture the status code and bytes written.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode   int
-	bytesWritten int
-}
-
-func newResponseWriter(w http.ResponseWriter) *responseWriter {
-	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	n, err := rw.ResponseWriter.Write(b)
-	rw.bytesWritten += n
-	return n, err
-}
 
 // MetricsMiddleware records HTTP request metrics.
 type MetricsMiddleware struct {
@@ -43,21 +22,24 @@ func NewMetricsMiddleware(metrics *MetricsCollector, logger zerolog.Logger) *Met
 }
 
 // Middleware returns an HTTP middleware that records request metrics.
+// Uses httpsnoop to preserve http.Hijacker/http.Flusher interfaces.
 func (m *MetricsMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		rw := newResponseWriter(w)
+		var statusCode int
 
-		next.ServeHTTP(rw, r)
+		metrics := httpsnoop.CaptureMetrics(next, w, r)
+		statusCode = metrics.Code
 
 		duration := time.Since(start).Seconds()
 		tenantID, _ := tenant.GetTenantID(r.Context())
 		if tenantID == "" {
 			tenantID = "unknown"
 		}
-		status := fmt.Sprintf("%d", rw.statusCode)
+		status := fmt.Sprintf("%d", statusCode)
+		path := r.URL.Path
 
-		m.metrics.HTTPRequestsTotal.WithLabelValues(tenantID, r.Method, r.URL.Path, status).Inc()
-		m.metrics.HTTPRequestDuration.WithLabelValues(tenantID, r.Method, r.URL.Path).Observe(duration)
+		m.metrics.HTTPRequestsTotal.WithLabelValues(tenantID, r.Method, path, status).Inc()
+		m.metrics.HTTPRequestDuration.WithLabelValues(tenantID, r.Method, path).Observe(duration)
 	})
 }
