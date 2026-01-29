@@ -1,0 +1,31 @@
+{
+  "dashboard": {
+    "title": "Kapok GraphQL Performance",
+    "uid": "kapok-graphql",
+    "tags": ["kapok", "graphql"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Query Rate by Operation",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [{"expr": "sum(rate(kapok_graphql_queries_total[5m])) by (operation_type, operation_name)"}]
+      },
+      {
+        "title": "P95 Query Duration",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(kapok_graphql_query_duration_seconds_bucket[5m])) by (le, operation_name))"}]
+      },
+      {
+        "title": "GraphQL Errors",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [{"expr": "sum(rate(kapok_graphql_errors_total[5m])) by (tenant_id, operation_type)"}]
+      }
+    ],
+    "templating": {"list": []},
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "10s"
+  }
+}

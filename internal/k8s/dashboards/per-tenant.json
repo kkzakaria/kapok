@@ -1,0 +1,48 @@
+{
+  "dashboard": {
+    "title": "Kapok Per-Tenant Metrics",
+    "uid": "kapok-per-tenant",
+    "tags": ["kapok", "tenant"],
+    "timezone": "browser",
+    "templating": {
+      "list": [
+        {
+          "name": "tenant_id",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(kapok_http_requests_total, tenant_id)",
+          "refresh": 2,
+          "sort": 1
+        }
+      ]
+    },
+    "panels": [
+      {
+        "title": "CPU Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [{"expr": "kapok_tenant_cpu_usage{tenant_id=\"$tenant_id\"}"}]
+      },
+      {
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [{"expr": "kapok_tenant_memory_usage{tenant_id=\"$tenant_id\"}"}]
+      },
+      {
+        "title": "Storage Usage",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [{"expr": "kapok_tenant_storage_usage{tenant_id=\"$tenant_id\"}"}]
+      },
+      {
+        "title": "Request Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [{"expr": "sum(rate(kapok_http_requests_total{tenant_id=\"$tenant_id\"}[5m]))"}]
+      }
+    ],
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "10s"
+  }
+}

@@ -7,12 +7,22 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Server     ServerConfig     `mapstructure:"server"`
-	Database   DatabaseConfig   `mapstructure:"database"`
-	Redis      RedisConfig      `mapstructure:"redis"`
-	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
-	Log        LogConfig        `mapstructure:"log"`
-	JWT        JWTConfig        `mapstructure:"jwt"`
+	Server        ServerConfig        `mapstructure:"server"`
+	Database      DatabaseConfig      `mapstructure:"database"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	Kubernetes    KubernetesConfig    `mapstructure:"kubernetes"`
+	Log           LogConfig           `mapstructure:"log"`
+	JWT           JWTConfig           `mapstructure:"jwt"`
+	Observability ObservabilityConfig `mapstructure:"observability"`
+}
+
+// ObservabilityConfig holds observability and monitoring configuration
+type ObservabilityConfig struct {
+	Enabled        bool    `mapstructure:"enabled"`
+	MetricsPort    int     `mapstructure:"metrics_port"`
+	TracingEnabled bool    `mapstructure:"tracing_enabled"`
+	SampleRate     float64 `mapstructure:"tracing_sample_rate"`
+	JaegerEndpoint string  `mapstructure:"jaeger_endpoint"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -120,6 +130,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log format: %s (must be json or console)", c.Log.Format)
 	}
 
+	// Observability validation (only when enabled)
+	if c.Observability.Enabled {
+		if c.Observability.MetricsPort < 1 || c.Observability.MetricsPort > 65535 {
+			return fmt.Errorf("invalid observability metrics port: %d (must be 1-65535)", c.Observability.MetricsPort)
+		}
+		if c.Observability.SampleRate < 0 || c.Observability.SampleRate > 1 {
+			return fmt.Errorf("invalid tracing sample rate: %f (must be 0.0-1.0)", c.Observability.SampleRate)
+		}
+	}
+
 	return nil
 }
 
@@ -158,6 +178,13 @@ func Defaults() *Config {
 			AccessTokenTTL:   15 * time.Minute,
 			RefreshTokenTTL:  168 * time.Hour, // 7 days
 			SigningAlgorithm: "HS256",
+		},
+		Observability: ObservabilityConfig{
+			Enabled:        true,
+			MetricsPort:    9090,
+			TracingEnabled: true,
+			SampleRate:     0.1,
+			JaegerEndpoint: "jaeger-collector:4318",
 		},
 	}
 }

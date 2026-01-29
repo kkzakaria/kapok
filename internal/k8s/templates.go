@@ -41,6 +41,9 @@ const ValuesYAML = `global:
     jwtSecret: ""
     databaseURL: ""
     redisPassword: ""
+  observability:
+    enabled: {{ .ObservabilityEnabled }}
+    metricsPort: 9090
 
 control-plane:
   replicaCount: 2
@@ -108,12 +111,18 @@ spec:
     metadata:
       labels:
         app: %s
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: %s
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           ports:
             - containerPort: 8080
+            - containerPort: 9090
+              name: metrics
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
@@ -196,6 +205,11 @@ data:
   KAPOK_LOG_LEVEL: "info"
   KAPOK_LOG_FORMAT: "json"
   KAPOK_SERVICE_ROLE: "control-plane"
+  KAPOK_OBSERVABILITY_ENABLED: "true"
+  KAPOK_OBSERVABILITY_METRICS_PORT: "9090"
+  KAPOK_OBSERVABILITY_TRACING_ENABLED: "true"
+  KAPOK_OBSERVABILITY_TRACING_SAMPLE_RATE: "0.1"
+  KAPOK_OBSERVABILITY_JAEGER_ENDPOINT: "jaeger-collector:4318"
 `,
 	"graphql-engine": `apiVersion: v1
 kind: ConfigMap
@@ -210,6 +224,11 @@ data:
   KAPOK_SERVICE_ROLE: "graphql-engine"
   KAPOK_GRAPHQL_INTROSPECTION: "true"
   KAPOK_GRAPHQL_CACHE_TTL: "300"
+  KAPOK_OBSERVABILITY_ENABLED: "true"
+  KAPOK_OBSERVABILITY_METRICS_PORT: "9090"
+  KAPOK_OBSERVABILITY_TRACING_ENABLED: "true"
+  KAPOK_OBSERVABILITY_TRACING_SAMPLE_RATE: "0.1"
+  KAPOK_OBSERVABILITY_JAEGER_ENDPOINT: "jaeger-collector:4318"
 `,
 	"provisioner": `apiVersion: v1
 kind: ConfigMap
@@ -223,6 +242,11 @@ data:
   KAPOK_LOG_FORMAT: "json"
   KAPOK_SERVICE_ROLE: "provisioner"
   KAPOK_PROVISIONER_SCHEMA_PREFIX: "tenant_"
+  KAPOK_OBSERVABILITY_ENABLED: "true"
+  KAPOK_OBSERVABILITY_METRICS_PORT: "9090"
+  KAPOK_OBSERVABILITY_TRACING_ENABLED: "true"
+  KAPOK_OBSERVABILITY_TRACING_SAMPLE_RATE: "0.1"
+  KAPOK_OBSERVABILITY_JAEGER_ENDPOINT: "jaeger-collector:4318"
 `,
 }
 

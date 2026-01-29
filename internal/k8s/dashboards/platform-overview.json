@@ -1,0 +1,37 @@
+{
+  "dashboard": {
+    "title": "Kapok Platform Overview",
+    "uid": "kapok-platform-overview",
+    "tags": ["kapok"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [{"expr": "sum(rate(kapok_http_requests_total[5m]))"}]
+      },
+      {
+        "title": "Error Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [{"expr": "sum(rate(kapok_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(kapok_http_requests_total[5m]))"}]
+      },
+      {
+        "title": "Active Tenants",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+        "targets": [{"expr": "count(count by (tenant_id) (kapok_http_requests_total))"}]
+      },
+      {
+        "title": "P95 Latency",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(kapok_http_request_duration_seconds_bucket[5m])) by (le))"}]
+      }
+    ],
+    "templating": {"list": []},
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "10s"
+  }
+}
