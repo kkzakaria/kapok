@@ -1,0 +1,247 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly security scans
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks - Secret Scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: TruffleHog - Secret Scanning
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+  sast:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        run: gosec -fmt sarif -out gosec-results.sarif ./...
+        continue-on-error: true
+
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: gosec-results.sarif
+          category: gosec
+
+      - name: Semgrep SAST
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/golang
+            p/owasp-top-ten
+          generateSarif: true
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  dependency-scanning:
+    name: Dependency Vulnerability Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Snyk Dependency Scanning
+        uses: snyk/actions/golang@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+        continue-on-error: true
+
+      - name: Upload Snyk SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+          category: snyk
+
+  container-scanning:
+    name: Container Image Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker images
+        run: |
+          docker build -t kapok-gateway:test -f deployments/docker/gateway.Dockerfile .
+          docker build -t kapok-cli:test -f deployments/docker/cli.Dockerfile .
+
+      - name: Run Trivy vulnerability scanner - Gateway
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'kapok-gateway:test'
+          format: 'sarif'
+          output: 'trivy-gateway.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy SARIF - Gateway
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-gateway.sarif'
+          category: 'trivy-gateway'
+
+      - name: Run Trivy vulnerability scanner - CLI
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'kapok-cli:test'
+          format: 'sarif'
+          output: 'trivy-cli.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy SARIF - CLI
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-cli.sarif'
+          category: 'trivy-cli'
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: 'kapok-gateway:test'
+          fail-build: false
+          severity-cutoff: high
+
+  infrastructure-scanning:
+    name: Infrastructure as Code Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: tfsec - Terraform Security Scanner
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          soft_fail: true
+
+      - name: Checkov - Infrastructure Security Scanner
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: deployments/
+          framework: kubernetes,dockerfile
+          output_format: sarif
+          output_file_path: checkov.sarif
+          soft_fail: true
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'go' ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{matrix.language}}"
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, sast, dependency-scanning, container-scanning, infrastructure-scanning, codeql]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate Security Summary
+        run: |
+          echo "# Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Secret Scanning: ${{ needs.secret-scanning.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- SAST: ${{ needs.sast.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Scanning: ${{ needs.dependency-scanning.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Container Scanning: ${{ needs.container-scanning.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Infrastructure Scanning: ${{ needs.infrastructure-scanning.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- CodeQL: ${{ needs.codeql.result }}" >> $GITHUB_STEP_SUMMARY
+
+  block-on-critical:
+    name: Block on Critical Vulnerabilities
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, sast, dependency-scanning, container-scanning]
+    steps:
+      - name: Check for critical findings
+        run: |
+          if [ "${{ needs.secret-scanning.result }}" == "failure" ]; then
+            echo "::error::Critical security findings detected in secret scanning"
+            exit 1
+          fi
+          if [ "${{ needs.dependency-scanning.result }}" == "failure" ]; then
+            echo "::error::Critical vulnerabilities detected in dependencies"
+            exit 1
+          fi
+          echo "No critical security findings"
