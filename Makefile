@@ -190,3 +190,27 @@ install-tools: ## Install development tools
 	go install mvdan.cc/gofumpt@latest
 	go install github.com/cosmtrek/air@latest
 	@echo "$(GREEN)Tools installed$(NC)"
+
+# =============================================================================
+# Web Console
+# =============================================================================
+
+web-install: ## Install web console dependencies
+	@echo "$(YELLOW)Installing web console dependencies...$(NC)"
+	cd web && npm install
+
+web-dev: ## Start web console dev server
+	@echo "$(YELLOW)Starting web console...$(NC)"
+	cd web && npm run dev
+
+web-build: ## Build web console for production
+	@echo "$(YELLOW)Building web console...$(NC)"
+	cd web && npm run build
+
+web-lint: ## Lint web console
+	@echo "$(YELLOW)Linting web console...$(NC)"
+	cd web && npm run lint
+
+web-typecheck: ## Type-check web console
+	@echo "$(YELLOW)Type-checking web console...$(NC)"
+	cd web && npm run typecheck
