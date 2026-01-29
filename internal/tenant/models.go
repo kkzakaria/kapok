@@ -23,12 +23,16 @@ func (s TenantStatus) String() string {
 
 // Tenant represents a multi-tenant entity in the system
 type Tenant struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
-	SchemaName string       `json:"schema_name"`
-	Status     TenantStatus `json:"status"`
-	CreatedAt  time.Time    `json:"created_at"`
-	UpdatedAt  time.Time    `json:"updated_at"`
+	ID               string       `json:"id"`
+	Name             string       `json:"name"`
+	SchemaName       string       `json:"schema_name"`
+	Status           TenantStatus `json:"status"`
+	Slug             string       `json:"slug"`
+	IsolationLevel   string       `json:"isolation_level"`
+	StorageUsedBytes int64        `json:"storage_used_bytes"`
+	LastActivity     *time.Time   `json:"last_activity"`
+	CreatedAt        time.Time    `json:"created_at"`
+	UpdatedAt        time.Time    `json:"updated_at"`
 }
 
 // Validation constants

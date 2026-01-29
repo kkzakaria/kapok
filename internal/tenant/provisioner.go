@@ -4,12 +4,26 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kapok/kapok/internal/database"
 	"github.com/rs/zerolog"
 )
+
+var nonAlphanumDash = regexp.MustCompile(`[^a-z0-9-]+`)
+var multiDash = regexp.MustCompile(`-{2,}`)
+
+// slugify converts a name to a URL-safe slug.
+func slugify(name string) string {
+	s := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	s = nonAlphanumDash.ReplaceAllString(s, "")
+	s = multiDash.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
 
 // Provisioner handles tenant provisioning operations
 type Provisioner struct {
@@ -46,14 +60,19 @@ func (p *Provisioner) CreateTenant(ctx context.Context, name string) (*Tenant, e
 	tenantID := uuid.New().String()
 	schemaName := GenerateSchemaName(tenantID)
 
+	// Generate slug from name: lowercase, replace spaces with dashes, strip non-alphanumeric
+	slug := slugify(name)
+
 	// Create tenant object
 	tenant := &Tenant{
-		ID:         tenantID,
-		Name:       name,
-		SchemaName: schemaName,
-		Status:     StatusProvisioning,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		ID:             tenantID,
+		Name:           name,
+		SchemaName:     schemaName,
+		Status:         StatusProvisioning,
+		Slug:           slug,
+		IsolationLevel: "schema",
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
 	// Begin transaction
@@ -65,14 +84,16 @@ func (p *Provisioner) CreateTenant(ctx context.Context, name string) (*Tenant, e
 
 	// Insert tenant metadata
 	query := `
-		INSERT INTO tenants (id, name, schema_name, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO tenants (id, name, schema_name, status, slug, isolation_level, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err = tx.ExecContext(ctx, query, 
-		tenant.ID, 
-		tenant.Name, 
-		tenant.SchemaName, 
+	_, err = tx.ExecContext(ctx, query,
+		tenant.ID,
+		tenant.Name,
+		tenant.SchemaName,
 		tenant.Status,
+		tenant.Slug,
+		tenant.IsolationLevel,
 		tenant.CreatedAt,
 		tenant.UpdatedAt,
 	)
@@ -129,7 +150,10 @@ func (p *Provisioner) ListTenants(ctx context.Context, status TenantStatus, limi
 
 	// Build query
 	query := `
-		SELECT id, name, schema_name, status, created_at, updated_at
+		SELECT id, name, schema_name, status,
+		       COALESCE(slug, ''), COALESCE(isolation_level, 'schema'),
+		       COALESCE(storage_used_bytes, 0), last_activity,
+		       created_at, updated_at
 		FROM tenants
 	`
 	args := []interface{}{}
@@ -172,6 +196,10 @@ func (p *Provisioner) ListTenants(ctx context.Context, status TenantStatus, limi
 			&tenant.Name,
 			&tenant.SchemaName,
 			&tenant.Status,
+			&tenant.Slug,
+			&tenant.IsolationLevel,
+			&tenant.StorageUsedBytes,
+			&tenant.LastActivity,
 			&tenant.CreatedAt,
 			&tenant.UpdatedAt,
 		)
@@ -195,7 +223,10 @@ func (p *Provisioner) ListTenants(ctx context.Context, status TenantStatus, limi
 // GetTenantByID retrieves a tenant by ID
 func (p *Provisioner) GetTenantByID(ctx context.Context, id string) (*Tenant, error) {
 	query := `
-		SELECT id, name, schema_name, status, created_at, updated_at
+		SELECT id, name, schema_name, status,
+		       COALESCE(slug, ''), COALESCE(isolation_level, 'schema'),
+		       COALESCE(storage_used_bytes, 0), last_activity,
+		       created_at, updated_at
 		FROM tenants
 		WHERE id = $1
 	`
@@ -206,6 +237,10 @@ func (p *Provisioner) GetTenantByID(ctx context.Context, id string) (*Tenant, er
 		&tenant.Name,
 		&tenant.SchemaName,
 		&tenant.Status,
+		&tenant.Slug,
+		&tenant.IsolationLevel,
+		&tenant.StorageUsedBytes,
+		&tenant.LastActivity,
 		&tenant.CreatedAt,
 		&tenant.UpdatedAt,
 	)
@@ -222,7 +257,10 @@ func (p *Provisioner) GetTenantByID(ctx context.Context, id string) (*Tenant, er
 // GetTenantByName retrieves a tenant by name
 func (p *Provisioner) GetTenantByName(ctx context.Context, name string) (*Tenant, error) {
 	query := `
-		SELECT id, name, schema_name, status, created_at, updated_at
+		SELECT id, name, schema_name, status,
+		       COALESCE(slug, ''), COALESCE(isolation_level, 'schema'),
+		       COALESCE(storage_used_bytes, 0), last_activity,
+		       created_at, updated_at
 		FROM tenants
 		WHERE name = $1
 	`
@@ -233,6 +271,10 @@ func (p *Provisioner) GetTenantByName(ctx context.Context, name string) (*Tenant
 		&tenant.Name,
 		&tenant.SchemaName,
 		&tenant.Status,
+		&tenant.Slug,
+		&tenant.IsolationLevel,
+		&tenant.StorageUsedBytes,
+		&tenant.LastActivity,
 		&tenant.CreatedAt,
 		&tenant.UpdatedAt,
 	)
