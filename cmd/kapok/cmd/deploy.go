@@ -40,6 +40,10 @@ func init() {
 	deployCmd.Flags().Bool("dry-run", false, "Generate charts without deploying")
 	deployCmd.Flags().String("context", "", "Kubeconfig context name for cloud detection")
 	deployCmd.Flags().String("timeout", "10m", "Helm deploy timeout (e.g. 5m, 15m)")
+	deployCmd.Flags().Bool("observability", true, "Enable observability stack (Prometheus, Grafana, Loki, Jaeger)")
+	deployCmd.Flags().String("grafana-password", "admin", "Grafana admin password")
+	deployCmd.Flags().String("slack-webhook", "", "Slack webhook URL for alert notifications")
+	deployCmd.Flags().String("pagerduty-key", "", "PagerDuty service key for critical alerts")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -55,6 +59,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	kubeContext, _ := cmd.Flags().GetString("context")
 	timeout, _ := cmd.Flags().GetString("timeout")
+	observability, _ := cmd.Flags().GetBool("observability")
+	grafanaPassword, _ := cmd.Flags().GetString("grafana-password")
+	slackWebhook, _ := cmd.Flags().GetString("slack-webhook")
+	pagerdutyKey, _ := cmd.Flags().GetString("pagerduty-key")
 
 	deployer := &deploy.Deployer{
 		Detector:  &k8s.KubeconfigDetector{ContextName: kubeContext},
@@ -63,16 +71,20 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := deploy.Options{
-		Cloud:     cloud,
-		Namespace: namespace,
-		Domain:    domain,
-		TLS:       tls,
-		HPA:       hpa,
-		KEDA:      keda,
-		ImageTag:  imageTag,
-		OutputDir: outputDir,
-		DryRun:    dryRun,
-		Timeout:   timeout,
+		Cloud:           cloud,
+		Namespace:       namespace,
+		Domain:          domain,
+		TLS:             tls,
+		HPA:             hpa,
+		KEDA:            keda,
+		Observability:   observability,
+		ImageTag:        imageTag,
+		OutputDir:       outputDir,
+		DryRun:          dryRun,
+		Timeout:         timeout,
+		GrafanaPassword: grafanaPassword,
+		SlackWebhook:    slackWebhook,
+		PagerDutyKey:    pagerdutyKey,
 	}
 
 	if err := deployer.Run(opts); err != nil {
