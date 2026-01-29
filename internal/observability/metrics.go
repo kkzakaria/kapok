@@ -68,3 +68,10 @@ func NewMetricsCollector(reg prometheus.Registerer) *MetricsCollector {
 		}, []string{"tenant_id"}),
 	}
 }
+
+// SetTenantResourceUsage updates the resource usage gauges for a tenant.
+func (mc *MetricsCollector) SetTenantResourceUsage(tenantID string, cpu, memory, storage float64) {
+	mc.TenantCPUUsage.WithLabelValues(tenantID).Set(cpu)
+	mc.TenantMemoryUsage.WithLabelValues(tenantID).Set(memory)
+	mc.TenantStorageUsage.WithLabelValues(tenantID).Set(storage)
+}

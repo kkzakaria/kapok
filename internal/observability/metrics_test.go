@@ -37,3 +37,24 @@ func TestMetricsCollector_IncrementCounter(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, families)
 }
+
+func TestMetricsCollector_SetTenantResourceUsage(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	mc := NewMetricsCollector(reg)
+
+	mc.SetTenantResourceUsage("tenant-1", 0.75, 512.0, 0.85)
+
+	families, err := reg.Gather()
+	require.NoError(t, err)
+
+	found := map[string]bool{}
+	for _, f := range families {
+		switch f.GetName() {
+		case "kapok_tenant_cpu_usage", "kapok_tenant_memory_usage", "kapok_tenant_storage_usage":
+			found[f.GetName()] = true
+		}
+	}
+	assert.True(t, found["kapok_tenant_cpu_usage"])
+	assert.True(t, found["kapok_tenant_memory_usage"])
+	assert.True(t, found["kapok_tenant_storage_usage"])
+}

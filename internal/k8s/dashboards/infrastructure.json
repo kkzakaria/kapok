@@ -1,0 +1,37 @@
+{
+  "dashboard": {
+    "title": "Kapok Infrastructure Health",
+    "uid": "kapok-infrastructure",
+    "tags": ["kapok", "infrastructure"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "DB Query Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [{"expr": "sum(rate(kapok_db_queries_total[5m])) by (operation)"}]
+      },
+      {
+        "title": "DB Query Duration (P95)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(kapok_db_query_duration_seconds_bucket[5m])) by (le))"}]
+      },
+      {
+        "title": "Pod CPU Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [{"expr": "rate(container_cpu_usage_seconds_total{namespace=\"kapok\"}[5m])"}]
+      },
+      {
+        "title": "Pod Memory Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [{"expr": "container_memory_usage_bytes{namespace=\"kapok\"}"}]
+      }
+    ],
+    "templating": {"list": []},
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "30s"
+  }
+}

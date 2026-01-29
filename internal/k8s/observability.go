@@ -187,13 +187,13 @@ data:
               summary: "Tenant storage nearly full"
               description: "Tenant {{ "{{ $labels.tenant_id }}" }} storage usage is above 90%"
           - alert: DBConnectionPoolExhausted
-            expr: rate(kapok_db_queries_total[1m]) == 0 and kapok_db_queries_total > 0
-            for: 2m
+            expr: sum(rate(kapok_db_queries_total[5m])) == 0 and sum(increase(kapok_http_requests_total[5m])) > 10
+            for: 5m
             labels:
               severity: critical
             annotations:
               summary: "Database connection pool may be exhausted"
-              description: "No database queries processed in the last minute"
+              description: "No database queries processed in 5 minutes despite active HTTP traffic"
 `
 
 // ObservabilityValuesYAML is the combined values template for the observability subchart.

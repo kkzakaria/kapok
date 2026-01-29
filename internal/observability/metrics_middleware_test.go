@@ -62,3 +62,23 @@ func TestMetricsMiddleware_CapturesStatusCode(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+func TestNormalizePath(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/api/test", "/api/test"},
+		{"/api/tenants/123/resources", "/api/tenants/:id/resources"},
+		{"/api/tenants/550e8400-e29b-41d4-a716-446655440000", "/api/tenants/:id"},
+		{"/api/users/abcdef0123456789", "/api/users/:id"},
+		{"/healthz", "/healthz"},
+		{"/graphql", "/graphql"},
+		{"/api/short", "/api/short"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizePath(tt.input))
+		})
+	}
+}
