@@ -8,6 +8,14 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_KAPOK_API_URL || "http://localhost:8080";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validateUUID(id: string): void {
+  if (!UUID_RE.test(id)) {
+    throw new Error(`Invalid tenant ID: ${id}`);
+  }
+}
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -26,11 +34,13 @@ function getToken(): string | null {
 function setTokens(tokens: AuthTokens) {
   localStorage.setItem("kapok_access_token", tokens.access_token);
   localStorage.setItem("kapok_refresh_token", tokens.refresh_token);
+  document.cookie = "kapok_has_token=1; path=/; SameSite=Lax";
 }
 
 function clearTokens() {
   localStorage.removeItem("kapok_access_token");
   localStorage.removeItem("kapok_refresh_token");
+  document.cookie = "kapok_has_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 }
 
 async function request<T>(
@@ -102,6 +112,7 @@ export const api = {
   },
 
   async getTenant(id: string): Promise<Tenant> {
+    validateUUID(id);
     return request<Tenant>(`/api/v1/admin/tenants/${id}`);
   },
 
@@ -116,6 +127,7 @@ export const api = {
   },
 
   async deleteTenant(id: string): Promise<void> {
+    validateUUID(id);
     return request<void>(`/api/v1/admin/tenants/${id}`, {
       method: "DELETE",
     });
@@ -130,6 +142,7 @@ export const api = {
 
   // GraphQL
   getGraphQLEndpoint(tenantId: string): string {
+    validateUUID(tenantId);
     return `${API_URL}/api/v1/tenants/${tenantId}/graphql`;
   },
 

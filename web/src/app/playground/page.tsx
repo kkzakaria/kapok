@@ -164,7 +164,7 @@ query {
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {history.map((h, i) => (
               <button
-                key={i}
+                key={`${i}-${h.slice(0, 20)}`}
                 onClick={() => {
                   setQuery(h);
                   setShowHistory(false);

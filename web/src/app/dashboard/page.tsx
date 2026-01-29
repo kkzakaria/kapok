@@ -41,6 +41,10 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {!stats && !error && (
+        <div className="mt-20 text-center text-gray-400">Loading dashboard...</div>
+      )}
+
       {stats && (
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard

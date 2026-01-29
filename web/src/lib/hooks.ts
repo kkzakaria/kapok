@@ -30,10 +30,7 @@ export function useAsync<T>(
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const fnRef = useRef(fn);
-
-  useEffect(() => {
-    fnRef.current = fn;
-  });
+  fnRef.current = fn;
 
   const execute = useCallback(async () => {
     setLoading(true);

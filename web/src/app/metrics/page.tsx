@@ -12,7 +12,6 @@ import {
   LineElement,
   LinearScale,
   PointElement,
-  TimeScale,
   Title,
   Tooltip,
 } from "chart.js";
@@ -28,7 +27,6 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
-  TimeScale,
 );
 
 const TIME_RANGES = [
