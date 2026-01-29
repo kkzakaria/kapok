@@ -59,12 +59,6 @@ func main() {
 	if err := migrator.CreateControlDatabase(ctx); err != nil {
 		log.Fatal().Err(err).Msg("failed to run control migrations")
 	}
-	if err := createUsersTable(ctx, db); err != nil {
-		log.Fatal().Err(err).Msg("failed to create users table")
-	}
-	if err := extendTenantsTable(ctx, db); err != nil {
-		log.Fatal().Err(err).Msg("failed to extend tenants table")
-	}
 	if err := seedAdminUser(ctx, db); err != nil {
 		log.Fatal().Err(err).Msg("failed to seed admin user")
 	}
@@ -123,36 +117,6 @@ func envInt(key string, fallback int) int {
 		}
 	}
 	return fallback
-}
-
-func createUsersTable(ctx context.Context, db *database.DB) error {
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS users (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			email VARCHAR(256) UNIQUE NOT NULL,
-			password_hash TEXT NOT NULL,
-			roles TEXT NOT NULL DEFAULT 'user',
-			tenant_id UUID,
-			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-		)
-	`)
-	return err
-}
-
-func extendTenantsTable(ctx context.Context, db *database.DB) error {
-	cols := []string{
-		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug VARCHAR(100)",
-		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS isolation_level VARCHAR(20) DEFAULT 'schema'",
-		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS storage_used_bytes BIGINT DEFAULT 0",
-		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_activity TIMESTAMP",
-	}
-	for _, q := range cols {
-		if _, err := db.ExecContext(ctx, q); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func seedAdminUser(ctx context.Context, db *database.DB) error {

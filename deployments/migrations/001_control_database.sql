@@ -69,6 +69,27 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, timestamp D
 CREATE INDEX IF NOT EXISTS idx_audit_log_metadata ON audit_log USING GIN (metadata);
 
 -- ===========================================================================
+-- Tenants Table Extensions (control-plane)
+-- ===========================================================================
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS isolation_level VARCHAR(20) DEFAULT 'schema';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS storage_used_bytes BIGINT DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_activity TIMESTAMP;
+
+-- ===========================================================================
+-- Users Table (authentication)
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(256) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    roles TEXT NOT NULL DEFAULT 'user',
+    tenant_id UUID,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ===========================================================================
 -- Trigger: Update tenants.updated_at
 -- ===========================================================================
 -- Automatically update the updated_at timestamp when a tenant record changes
