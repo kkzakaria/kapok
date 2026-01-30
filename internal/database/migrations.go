@@ -118,10 +118,31 @@ func (m *Migrator) CreateControlDatabase(ctx context.Context) error {
 		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS isolation_level VARCHAR(20) DEFAULT 'schema'",
 		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS storage_used_bytes BIGINT DEFAULT 0",
 		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_activity TIMESTAMP",
+		// Story 5: Hierarchy columns
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tenants(id)",
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS hierarchy_level VARCHAR(20) DEFAULT 'organization'",
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS path TEXT DEFAULT ''",
+		// Story 1: DB-per-tenant columns
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_name VARCHAR(100) DEFAULT ''",
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_host VARCHAR(256) DEFAULT ''",
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_port INT DEFAULT 0",
+		// Story 4: Tier column
+		"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'standard'",
 	}
 	for _, stmt := range tenantExtensions {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("failed to extend tenants table: %w", err)
+		}
+	}
+
+	// Story 5: Hierarchy indexes
+	hierarchyIndexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_tenants_parent ON tenants(parent_id)",
+		"CREATE INDEX IF NOT EXISTS idx_tenants_path ON tenants(path)",
+	}
+	for _, stmt := range hierarchyIndexes {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("failed to create hierarchy index: %w", err)
 		}
 	}
 
@@ -195,6 +216,49 @@ func (m *Migrator) CreateControlDatabase(ctx context.Context) error {
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create backup_schedules table: %w", err)
+	}
+
+	// Story 6: Tenant quotas table
+	_, err = tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS tenant_quotas (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL UNIQUE REFERENCES tenants(id),
+			max_storage_bytes BIGINT DEFAULT 0,
+			max_connections INT DEFAULT 0,
+			max_qps FLOAT DEFAULT 0,
+			max_children INT DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create tenant_quotas table: %w", err)
+	}
+
+	// Story 2: Tenant migrations table
+	_, err = tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS tenant_migrations (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id),
+			from_isolation VARCHAR(20) NOT NULL,
+			to_isolation VARCHAR(20) NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending',
+			started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			completed_at TIMESTAMP,
+			rollback_before TIMESTAMP,
+			error_message TEXT DEFAULT '',
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create tenant_migrations table: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_tenant_migrations_tenant ON tenant_migrations(tenant_id)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create tenant_migrations index: %w", err)
 	}
 
 	// Commit transaction

@@ -15,6 +15,30 @@ type Config struct {
 	JWT           JWTConfig           `mapstructure:"jwt"`
 	Observability ObservabilityConfig `mapstructure:"observability"`
 	Backup        BackupConfig        `mapstructure:"backup"`
+	MultiTenancy  MultiTenancyConfig  `mapstructure:"multi_tenancy"`
+}
+
+// MultiTenancyConfig holds advanced multi-tenancy configuration
+type MultiTenancyConfig struct {
+	DefaultIsolation string            `mapstructure:"default_isolation"` // "schema" or "database"
+	Thresholds       []ThresholdConfig `mapstructure:"thresholds"`
+	AutoMigration    AutoMigrationConfig `mapstructure:"auto_migration"`
+}
+
+// ThresholdConfig defines tier-based thresholds
+type ThresholdConfig struct {
+	Tier             string  `mapstructure:"tier"`
+	MaxStorageBytes  int64   `mapstructure:"max_storage_bytes"`
+	MaxConnections   int     `mapstructure:"max_connections"`
+	MaxQPS           float64 `mapstructure:"max_qps"`
+	MigrationTrigger float64 `mapstructure:"migration_trigger"` // percentage 0-1
+}
+
+// AutoMigrationConfig controls automated migration behavior
+type AutoMigrationConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	CooldownMinutes  int    `mapstructure:"cooldown_minutes"`
+	ApprovalRequired bool   `mapstructure:"approval_required"`
 }
 
 // BackupConfig holds backup and recovery configuration
@@ -247,6 +271,18 @@ func Defaults() *Config {
 			TracingEnabled: true,
 			SampleRate:     0.1,
 			JaegerEndpoint: "jaeger-collector:4318",
+		},
+		MultiTenancy: MultiTenancyConfig{
+			DefaultIsolation: "schema",
+			Thresholds: []ThresholdConfig{
+				{Tier: "standard", MaxStorageBytes: 10 << 30, MaxConnections: 50, MaxQPS: 1000, MigrationTrigger: 0.8},
+				{Tier: "premium", MaxStorageBytes: 100 << 30, MaxConnections: 200, MaxQPS: 5000, MigrationTrigger: 0.9},
+			},
+			AutoMigration: AutoMigrationConfig{
+				Enabled:          false,
+				CooldownMinutes:  60,
+				ApprovalRequired: true,
+			},
 		},
 	}
 }
