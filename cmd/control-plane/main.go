@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/kapok/kapok/internal/api"
 	"github.com/kapok/kapok/internal/auth"
+	"github.com/kapok/kapok/internal/backup"
+	"github.com/kapok/kapok/internal/backup/storage"
 	"github.com/kapok/kapok/internal/database"
 	gql "github.com/kapok/kapok/internal/graphql"
 	"github.com/kapok/kapok/internal/tenant"
@@ -63,13 +66,45 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to seed admin user")
 	}
 
+	// Build backup service
+	var backupStore storage.Store
+	backupStoragePath := envOr("KAPOK_BACKUP_STORAGE_PATH", "./backups")
+	backupStore, err = storage.NewFilesystemStore(backupStoragePath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create backup storage")
+	}
+
+	var encKey []byte
+	if keyHex := os.Getenv("KAPOK_BACKUP_ENCRYPTION_KEY"); keyHex != "" {
+		var decErr error
+		encKey, decErr = hexDecode(keyHex)
+		if decErr != nil || len(encKey) != 32 {
+			log.Fatal().Msg("KAPOK_BACKUP_ENCRYPTION_KEY must be 64 hex chars (32 bytes)")
+		}
+	}
+
+	retentionDays := envInt("KAPOK_BACKUP_RETENTION_DAYS", 30)
+	backupSvc := backup.NewService(db, backupStore, encKey, retentionDays, log.Logger)
+
+	// Start backup scheduler if enabled
+	if envOr("KAPOK_BACKUP_ENABLED", "false") == "true" {
+		scheduler := backup.NewScheduler(backupSvc, log.Logger)
+		backupCron := envOr("KAPOK_BACKUP_CRON", "0 */6 * * *")
+		cleanupCron := envOr("KAPOK_BACKUP_CLEANUP_CRON", "0 3 * * *")
+		if err := scheduler.Start(backupCron, cleanupCron); err != nil {
+			log.Fatal().Err(err).Msg("failed to start backup scheduler")
+		}
+		defer scheduler.Stop()
+	}
+
 	// Wire dependencies
 	deps := &api.Dependencies{
 		DB:          db,
 		JWTManager:  auth.NewJWTManager(jwtSecret),
 		Provisioner: tenant.NewProvisioner(db, log.Logger),
-		GQLHandler:  gql.NewHandler(db, log.Logger),
-		Logger:      log.Logger,
+		GQLHandler:    gql.NewHandler(db, log.Logger),
+		BackupService: backupSvc,
+		Logger:        log.Logger,
 		CORSOrigins: corsOrigins,
 	}
 
@@ -117,6 +152,10 @@ func envInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func hexDecode(s string) ([]byte, error) {
+	return hex.DecodeString(s)
 }
 
 func seedAdminUser(ctx context.Context, db *database.DB) error {

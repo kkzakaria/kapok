@@ -14,6 +14,34 @@ type Config struct {
 	Log           LogConfig           `mapstructure:"log"`
 	JWT           JWTConfig           `mapstructure:"jwt"`
 	Observability ObservabilityConfig `mapstructure:"observability"`
+	Backup        BackupConfig        `mapstructure:"backup"`
+}
+
+// BackupConfig holds backup and recovery configuration
+type BackupConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`
+	StorageType   string   `mapstructure:"storage_type"` // "filesystem" or "s3"
+	EncryptionKey string   `mapstructure:"encryption_key"` // hex-encoded 32-byte key; from ENV only
+	RetentionDays int      `mapstructure:"retention_days"`
+	BackupCron    string   `mapstructure:"backup_cron"`
+	CleanupCron   string   `mapstructure:"cleanup_cron"`
+	S3            S3Config `mapstructure:"s3"`
+	FS            FSConfig `mapstructure:"fs"`
+}
+
+// S3Config holds S3/MinIO storage configuration
+type S3Config struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	SecretAccessKey string `mapstructure:"secret_access_key"` // from ENV only
+	Bucket          string `mapstructure:"bucket"`
+	Region          string `mapstructure:"region"`
+	UseSSL          bool   `mapstructure:"use_ssl"`
+}
+
+// FSConfig holds filesystem storage configuration
+type FSConfig struct {
+	BasePath string `mapstructure:"base_path"`
 }
 
 // ObservabilityConfig holds observability and monitoring configuration
@@ -130,6 +158,25 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log format: %s (must be json or console)", c.Log.Format)
 	}
 
+	// Backup validation (only when enabled)
+	if c.Backup.Enabled {
+		validStorageTypes := map[string]bool{"filesystem": true, "s3": true}
+		if !validStorageTypes[c.Backup.StorageType] {
+			return fmt.Errorf("invalid backup storage_type: %s (must be filesystem or s3)", c.Backup.StorageType)
+		}
+		if c.Backup.StorageType == "s3" {
+			if c.Backup.S3.Endpoint == "" {
+				return fmt.Errorf("backup S3 endpoint is required")
+			}
+			if c.Backup.S3.Bucket == "" {
+				return fmt.Errorf("backup S3 bucket is required")
+			}
+		}
+		if c.Backup.StorageType == "filesystem" && c.Backup.FS.BasePath == "" {
+			return fmt.Errorf("backup filesystem base_path is required")
+		}
+	}
+
 	// Observability validation (only when enabled)
 	if c.Observability.Enabled {
 		if c.Observability.MetricsPort < 1 || c.Observability.MetricsPort > 65535 {
@@ -178,6 +225,21 @@ func Defaults() *Config {
 			AccessTokenTTL:   15 * time.Minute,
 			RefreshTokenTTL:  168 * time.Hour, // 7 days
 			SigningAlgorithm: "HS256",
+		},
+		Backup: BackupConfig{
+			Enabled:       false,
+			StorageType:   "filesystem",
+			RetentionDays: 30,
+			BackupCron:    "0 */6 * * *",
+			CleanupCron:   "0 3 * * *",
+			FS: FSConfig{
+				BasePath: "./backups",
+			},
+			S3: S3Config{
+				Bucket: "kapok-backups",
+				Region: "us-east-1",
+				UseSSL: true,
+			},
 		},
 		Observability: ObservabilityConfig{
 			Enabled:        true,
