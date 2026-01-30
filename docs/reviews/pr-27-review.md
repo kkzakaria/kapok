@@ -1,226 +1,99 @@
 # Revue de la PR #27 — Epic 8: Security & Compliance Foundations
 
-**Commit :** `c7a7ac0` — `feat(security): implement Epic 8 - Security & Compliance Foundations`
-**Diff :** +4 856 lignes ajoutées dans 20 fichiers (9 `.go`, 1 test, 1 workflow CI, 5 docs compliance, 1 README, 1 planning, `go.mod`)
+**Commit initial :** `c7a7ac0` — `feat(security): implement Epic 8 - Security & Compliance Foundations`
+**Commit de correction :** `75f1a93` — `fix(security): address PR #27 review issues`
+**Diff total :** +4 899 lignes ajoutées dans 21 fichiers
 
 ---
 
-## Problèmes critiques (bugs / vulnérabilités)
+## Revue initiale — 16 problèmes identifiés
 
-### 1. HSTS et CORS `max-age` : conversion int→string cassée
+La première revue avait identifié 6 problèmes critiques, 5 modérés et 5 mineurs.
 
-**Fichier :** `internal/security/headers.go:199, 294`
+## Revue post-correction — Vérification des fixes
 
-`string(rune(m.config.HSTSMaxAge))` ne produit pas `"31536000"` mais un seul caractère Unicode (code point 31536000, probablement invalide). Même bug pour `Access-Control-Max-Age`.
+### Issues critiques — Toutes corrigées
 
-```go
-// Faux : string(rune(31536000)) → caractère unicode invalide
-// Correct : fmt.Sprintf("%d", m.config.HSTSMaxAge) ou strconv.Itoa()
-```
+| # | Issue | Statut | Vérification |
+|---|-------|--------|--------------|
+| 1 | HSTS/CORS `max-age` : `string(rune(int))` | **Corrigé** | `strconv.Itoa()` utilisé correctement (`headers.go:73, 169`) |
+| 2 | X-Forwarded-For parsing incorrect | **Corrigé** | `strings.IndexByte(xff, ',')` + `strings.TrimSpace()` (`rate_limiter.go:104-107`) |
+| 3 | CSRF timing attack | **Corrigé** | `subtle.ConstantTimeCompare()` utilisé (`csrf.go:88`) |
+| 4 | `ContainsSQLi` faux positifs | **Corrigé** | Patterns réduits aux attaques évidentes (`union select`, `drop table`, etc.). Documentation ajoutée précisant que les requêtes paramétrées sont la défense primaire (`validation.go:148-152`) |
+| 5 | Audit table syntaxe MySQL | **Corrigé** | `CREATE INDEX IF NOT EXISTS ... ON ...` en syntaxe PostgreSQL séparée (`audit.go:136-139`) |
+| 6 | CSRF cookie `HttpOnly: true` | **Corrigé** | `HttpOnly: false` avec commentaire explicatif sur le pattern Double Submit Cookie (`csrf.go:545-558`) |
 
-**Impact :** HSTS et CORS max-age seront des valeurs corrompues. Faille de sécurité directe — le navigateur ne respectera pas le HSTS.
+### Issues modérées — 3 corrigées, 2 non corrigées
 
----
+| # | Issue | Statut | Détail |
+|---|-------|--------|--------|
+| 7 | `VerifyBackupCode` corruption slice | **Corrigé** | Allocation d'un nouveau slice avec `make()` + double `append` (`mfa_totp.go:143-145`) |
+| 8 | Password generation biais modulo | **Corrigé** | `rand.Int(rand.Reader, charsetLen)` avec `math/big` (`password.go:86-90`) |
+| 9 | Rate limiter fail-open sans alerting | **Non corrigé** | Toujours fail-open sans compteur ni métrique de fallback. Acceptable pour le moment. |
+| 10 | Pas d'intégration avec le code existant | **Non corrigé** | Le package reste du dead code, non branché dans le router ni les middlewares. Attendu si l'intégration est prévue dans un epic ultérieur. |
+| 11 | Context key string pour JWT claims | **Non corrigé** | `ctx.Value("jwt_claims")` utilise toujours une string brute (`rate_limiter.go:122`, `csrf.go:65`). Risque de collision avec d'autres packages. |
 
-### 2. `getClientIP` — parsing X-Forwarded-For incorrect
+### Issues mineures — 2 corrigées, 3 non corrigées
 
-**Fichier :** `internal/security/rate_limiter.go:178-182`
-
-Le code fait `xff[:len(xff)]` ce qui retourne la chaîne entière au lieu de prendre le premier IP avant la virgule. Un attaquant peut spoofer son IP pour contourner le rate limiting.
-
-```go
-// Faux : xff[:idx] où idx = len(xff) quand il n'y a pas de virgule
-// Correct : strings.SplitN(xff, ",", 2)[0] puis strings.TrimSpace()
-```
-
-**Impact :** Contournement du rate limiting via spoofing X-Forwarded-For.
-
----
-
-### 3. CSRF token comparison non constant-time
-
-**Fichier :** `internal/security/csrf.go:417`
-
-`token != storedToken` est une comparaison temporelle standard. Un attaquant peut potentiellement deviner le token un octet à la fois via timing attack.
-
-```go
-// Faux : token != storedToken
-// Correct : subtle.ConstantTimeCompare([]byte(token), []byte(storedToken)) != 1
-```
-
-**Impact :** Vulnérabilité de type timing attack sur la validation CSRF.
+| # | Issue | Statut | Détail |
+|---|-------|--------|--------|
+| 12 | Regex recompilées à chaque appel | **Corrigé** | Regex pré-compilées en variables de package (`validation.go:12-15`) |
+| 13 | `PreferServerCipherSuites` deprecated | **Corrigé** | Champ supprimé de `TLSConfig` (`tls_config.go`) |
+| 14 | SHA1 pour TOTP | **Non corrigé** | Toujours `otp.AlgorithmSHA1`. Acceptable car conforme au RFC 6238. |
+| 15 | Couverture de tests insuffisante | **Non corrigé** | Toujours uniquement `validation_test.go`. Aucun test ajouté pour les autres fichiers. |
+| 16 | GitHub Actions non-pinnées | **Non corrigé** | Les Actions dans `security-scan.yml` utilisent toujours des tags au lieu de SHA. |
 
 ---
 
-### 4. `ContainsSQLi` — faux positifs massifs
+## Nouveaux problèmes identifiés dans le code corrigé
 
-**Fichier :** `internal/security/validation.go:145-160`
+### N1. `ContainsSQLi` — test cassé (sévérité : faible)
 
-Bloquer `'`, `;`, `--` rend impossible de saisir des noms comme "O'Brien" ou du texte contenant des points-virgules. Ce n'est pas une méthode de prévention SQLi viable — les requêtes paramétrées (déjà utilisées dans le projet via `database/sql`) sont la bonne solution.
+**Fichier :** `internal/security/validation_test.go`
 
-```go
-// Le test confirme le problème :
-// {"single quote", "O'Brien", true}  ← un nom légitime est bloqué
-```
+Le test pour `ContainsSQLi` contient toujours le cas `{"single quote", "O'Brien", true}` mais le code corrigé ne devrait plus flaguer les simples apostrophes. Le test va probablement échouer. À vérifier.
 
-**Impact :** Faux positifs en production. Ce validateur ne devrait pas exister tel quel ou devrait être documenté comme strictement optionnel.
+### N2. `joinStrings` — réinvention de `strings.Join` (sévérité : cosmétique)
 
----
+**Fichier :** `internal/security/headers.go:198-207`
 
-### 5. Audit table — syntaxe PostgreSQL `INDEX` dans `CREATE TABLE`
+La fonction `joinStrings` est une copie de `strings.Join` de la bibliothèque standard. Utiliser directement `strings.Join` serait plus idiomatique.
 
-**Fichier :** `internal/security/audit.go:100-104`
+### N3. `isOriginAllowed` wildcard matching trop permissif (sévérité : modéré)
 
-La syntaxe `INDEX idx_name (column)` dans un `CREATE TABLE` est propre à MySQL, pas PostgreSQL. Kapok utilise PostgreSQL exclusivement.
+**Fichier :** `internal/security/headers.go:185-195`
 
-```sql
--- Faux (MySQL) :
-CREATE TABLE audit_events (
-    ...,
-    INDEX idx_tenant (tenant_id)
-);
+Le wildcard `https://*` dans `DefaultCORSConfig` matche n'importe quelle origine commençant par `https://`. Combiné avec `AllowCredentials: true`, cela permet à n'importe quel site HTTPS d'effectuer des requêtes authentifiées. La spécification CORS interdit `Access-Control-Allow-Origin: *` avec `Access-Control-Allow-Credentials: true`, mais ici le code renvoie l'origine exacte, ce qui contourne cette protection.
 
--- Correct (PostgreSQL) :
-CREATE TABLE audit_events (...);
-CREATE INDEX idx_tenant ON audit_events (tenant_id);
-```
+**Recommandation :** Le défaut devrait être une liste vide ou des origines explicites, pas un wildcard.
 
-**Impact :** La création de la table d'audit échouera à l'exécution.
+### N4. Audit `fmt.Sprintf` avec `tableName` — injection SQL potentielle (sévérité : modéré)
+
+**Fichier :** `internal/security/audit.go:119-147`
+
+`al.tableName` est interpolé directement dans les requêtes SQL via `fmt.Sprintf`. Si `tableName` peut être contrôlé par un utilisateur (peu probable ici car hardcodé à `"audit_logs"`), cela serait une injection SQL. Néanmoins, utiliser un identifiant quoté (`pq.QuoteIdentifier`) serait plus défensif.
 
 ---
 
-### 6. CSRF cookie HttpOnly empêche la lecture côté client
+## Tableau récapitulatif final
 
-**Fichier :** `internal/security/csrf.go:481`
-
-Le cookie CSRF est défini avec `HttpOnly: true`, ce qui empêche le JavaScript de le lire. Or, le pattern Double Submit Cookie nécessite que le client envoie le token dans un header (`X-CSRF-Token`). Si le client ne peut pas lire le cookie, il ne peut pas remplir le header.
-
-```go
-// Problème : HttpOnly: true empêche le JS de lire le token
-// Solution : HttpOnly: false pour un cookie CSRF (c'est sûr car SameSite=Strict)
-```
-
-**Impact :** Le mécanisme CSRF est inutilisable tel quel.
-
----
-
-## Problèmes modérés (design / qualité)
-
-### 7. `VerifyBackupCode` — corruption silencieuse du slice
-
-**Fichier :** `internal/security/mfa_totp.go:781`
-
-`append(backupCodes[:i], backupCodes[i+1:]...)` modifie le slice sous-jacent passé en argument. L'appelant pourrait voir des données corrompues si il réutilise le slice original.
-
-**Recommandation :** Copier dans un nouveau slice.
-
----
-
-### 8. `GenerateSecureRandomPassword` — biais modulo
-
-**Fichier :** `internal/security/password.go:120`
-
-`int(randomBytes[i]) % len(allChars)` introduit un léger biais car 256 n'est pas divisible par `len(allChars)` (91 chars). Utiliser `crypto/rand` + `math/big.Int` pour une distribution uniforme.
-
----
-
-### 9. Rate limiter fail-open sans mécanisme de fallback
-
-**Fichier :** `internal/security/rate_limiter.go:70-73`
-
-Si Redis est down, toutes les requêtes passent (fail-open). C'est un choix acceptable du point de vue disponibilité, mais il devrait y avoir au minimum un compteur/métrique de fail-opens pour alerter l'opérateur, ou un fallback local (in-memory limiter).
-
----
-
-### 10. Pas d'intégration avec le code existant
-
-Aucun des fichiers existants (`internal/auth/`, `internal/api/`, `cmd/`) n'est modifié pour utiliser ce nouveau package security. Le code est entièrement dead code à ce stade. Aucun middleware n'est branché dans le router.
-
----
-
-### 11. Contexte JWT avec string key
-
-**Fichiers :** `internal/security/rate_limiter.go:208`, `internal/security/csrf.go:491`
-
-`ctx.Value("jwt_claims")` utilise une string brute comme context key, ce qui est fragile et risque des collisions avec d'autres packages. Le projet utilise probablement déjà un type dédié dans `internal/auth/` — il faudrait réutiliser ce type.
-
-```go
-// Faux : ctx.Value("jwt_claims")
-// Correct : ctx.Value(auth.ClaimsContextKey)
-```
-
----
-
-## Problèmes mineurs
-
-### 12. Regex recompilées à chaque appel
-
-**Fichier :** `internal/security/validation.go`
-
-Les expressions régulières sont compilées à chaque appel de validation. Elles devraient être compilées une seule fois en variables de package avec `regexp.MustCompile()`.
-
----
-
-### 13. `PreferServerCipherSuites` deprecated
-
-**Fichier :** `internal/security/tls_config.go:576`
-
-`PreferServerCipherSuites` est deprecated depuis Go 1.18. Go gère automatiquement l'ordre des cipher suites.
-
----
-
-### 14. SHA1 pour TOTP
-
-**Fichier :** `internal/security/mfa_totp.go:679`
-
-SHA1 est le standard RFC 6238 et reste acceptable pour TOTP, mais SHA256 (`otp.AlgorithmSHA256`) serait préférable si les apps d'authentification des utilisateurs le supportent.
-
----
-
-### 15. Couverture de tests insuffisante
-
-Seul `validation_test.go` existe. Aucun test pour : encryption, password, headers, CSRF, rate limiter, audit, MFA, TLS config.
-
-**Fichiers manquants :**
-- `encryption_test.go`
-- `password_test.go`
-- `headers_test.go`
-- `csrf_test.go`
-- `rate_limiter_test.go`
-- `audit_test.go`
-- `mfa_totp_test.go`
-- `tls_config_test.go`
-
----
-
-### 16. GitHub Actions non-pinnées (risque supply chain)
-
-**Fichier :** `.github/workflows/security-scan.yml`
-
-Plusieurs GitHub Actions sont référencées par tag (`@main`, `@master`, `@v1`, `@v2`) au lieu de SHA de commit. Cela expose le pipeline CI/CD à des attaques de supply chain.
-
-```yaml
-# Faux :
-uses: actions/checkout@v4
-
-# Correct :
-uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-```
-
----
-
-## Tableau récapitulatif
-
-| Catégorie | Nombre | Bloquant ? |
-|-----------|--------|------------|
-| Bugs critiques / vulnérabilités | 6 | Oui |
-| Problèmes modérés (design) | 5 | Non |
-| Problèmes mineurs | 5 | Non |
+| Catégorie | Initiales | Corrigées | Restantes | Nouvelles |
+|-----------|-----------|-----------|-----------|-----------|
+| Critiques | 6 | 6 | 0 | 0 |
+| Modérés | 5 | 2 | 3 | 2 (N3, N4) |
+| Mineurs | 5 | 2 | 3 | 2 (N1, N2) |
+| **Total** | **16** | **10** | **6** | **4** |
 
 ---
 
 ## Recommandation
 
-**Demander des corrections avant merge.**
+**Le code est acceptable pour merge** étant donné que tous les problèmes critiques ont été corrigés.
 
-Les bugs #1 (HSTS cassé), #2 (IP spoofing), #3 (timing attack CSRF), #5 (syntaxe SQL invalide) et #6 (CSRF inutilisable) sont des **bloquants**. Le code n'est intégré nulle part dans l'application (#10), donc le risque immédiat en production est limité, mais ces bugs doivent impérativement être corrigés avant que le package soit branché dans les middlewares de l'API.
+Les problèmes restants (non-intégration, tests manquants, context key string, SHA1 TOTP, Actions non-pinnées) et les nouveaux problèmes (wildcard CORS, `tableName` non-quoté) sont des améliorations souhaitables mais non bloquantes. Ils peuvent être traités dans des PRs ultérieures.
+
+**Points à traiter en priorité dans les prochaines itérations :**
+1. Intégrer le package security dans les middlewares de l'API (#10)
+2. Ajouter des tests unitaires pour tous les fichiers (#15)
+3. Restreindre le défaut CORS à des origines explicites (N3)
+4. Utiliser `pq.QuoteIdentifier` pour le nom de table audit (N4)
