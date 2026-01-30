@@ -60,6 +60,25 @@ func NewRouter(deps *Dependencies) http.Handler {
 			r.Get("/api/v1/admin/backups/{backupId}", GetBackup(deps))
 			r.Post("/api/v1/admin/backups/{backupId}/restore", RestoreBackup(deps))
 			r.Delete("/api/v1/admin/backups/{backupId}", DeleteBackup(deps))
+
+			// Hierarchy routes (Story 5)
+			r.Get("/api/v1/admin/tenants/{id}/children", ListChildren(deps))
+			r.Post("/api/v1/admin/tenants/{id}/children", CreateChildTenant(deps))
+
+			// Quota routes (Story 6)
+			r.Get("/api/v1/admin/tenants/{id}/quota", GetQuota(deps))
+			r.Put("/api/v1/admin/tenants/{id}/quota", SetQuota(deps))
+
+			// Usage routes (Story 3)
+			r.Get("/api/v1/admin/tenants/{id}/usage", GetTenantUsage(deps))
+
+			// Migration routes (Story 2)
+			r.Post("/api/v1/admin/tenants/{id}/migrate", MigrateTenant(deps))
+			r.Get("/api/v1/admin/migrations/{id}", GetMigration(deps))
+			r.Post("/api/v1/admin/migrations/{id}/rollback", RollbackMigration(deps))
+
+			// Auto-migration approval (Story 4)
+			r.Post("/api/v1/admin/tenants/{id}/approve-migration", ApproveMigration(deps))
 		})
 
 		// GraphQL proxy

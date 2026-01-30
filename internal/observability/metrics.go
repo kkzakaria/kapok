@@ -22,6 +22,9 @@ type MetricsCollector struct {
 	BackupSizeBytes      *prometheus.HistogramVec
 	RestoresTotal        *prometheus.CounterVec
 	LastBackupTimestamp  *prometheus.GaugeVec
+	TenantConnectionCount *prometheus.GaugeVec
+	TenantQPS             *prometheus.GaugeVec
+	TenantStorageBytes    *prometheus.GaugeVec
 }
 
 // NewMetricsCollector creates and registers all Prometheus metrics.
@@ -92,6 +95,18 @@ func NewMetricsCollector(reg prometheus.Registerer) *MetricsCollector {
 		LastBackupTimestamp: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "kapok_last_backup_timestamp",
 			Help: "Unix timestamp of last successful backup per tenant",
+		}, []string{"tenant_id"}),
+		TenantConnectionCount: factory.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "kapok_tenant_connection_count",
+			Help: "Active connection count per tenant",
+		}, []string{"tenant_id"}),
+		TenantQPS: factory.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "kapok_tenant_qps",
+			Help: "Queries per second per tenant",
+		}, []string{"tenant_id"}),
+		TenantStorageBytes: factory.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "kapok_tenant_storage_bytes",
+			Help: "Storage bytes used per tenant",
 		}, []string{"tenant_id"}),
 	}
 }

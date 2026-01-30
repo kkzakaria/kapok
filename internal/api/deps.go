@@ -11,11 +11,18 @@ import (
 
 // Dependencies holds all handler dependencies.
 type Dependencies struct {
-	DB            *database.DB
-	JWTManager    *auth.JWTManager
-	Provisioner   *tenant.Provisioner
-	GQLHandler    *gql.Handler
-	BackupService *backup.Service
-	Logger        zerolog.Logger
-	CORSOrigins   []string
+	DB               *database.DB
+	JWTManager       *auth.JWTManager
+	Provisioner      *tenant.Provisioner
+	GQLHandler       *gql.Handler
+	BackupService    *backup.Service
+	HierarchyManager *tenant.HierarchyManager
+	QuotaManager     *tenant.QuotaManager
+	PoolManager      *tenant.PoolManager
+	UsageCollector   *tenant.UsageCollector
+	ThresholdManager *tenant.ThresholdManager
+	MigrationManager *tenant.MigrationManager
+	DecisionEngine   *tenant.DecisionEngine
+	Logger           zerolog.Logger
+	CORSOrigins      []string
 }

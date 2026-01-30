@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     
-    CONSTRAINT tenants_status_check CHECK (status IN ('active', 'provisioning', 'suspended', 'deleted'))
+    CONSTRAINT tenants_status_check CHECK (status IN ('active', 'provisioning', 'suspended', 'deleted', 'migrating'))
 );
 
 -- Index for filtering by status
@@ -76,6 +76,19 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS isolation_level VARCHAR(20) DEFAULT
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS storage_used_bytes BIGINT DEFAULT 0;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_activity TIMESTAMP;
 
+-- Epic 9: Hierarchy columns
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tenants(id);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS hierarchy_level VARCHAR(20) DEFAULT 'organization';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS path TEXT DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_tenants_parent ON tenants(parent_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_path ON tenants(path);
+
+-- Epic 9: DB-per-tenant columns
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_name VARCHAR(100) DEFAULT '';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_host VARCHAR(256) DEFAULT '';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS database_port INT DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'standard';
+
 -- ===========================================================================
 -- Users Table (authentication)
 -- ===========================================================================
@@ -105,6 +118,41 @@ CREATE TRIGGER tenants_updated_at_trigger
 BEFORE UPDATE ON tenants
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- ===========================================================================
+-- Initial Audit Log Entry
+-- ===========================================================================
+-- Record the creation of the control database
+-- ===========================================================================
+-- Tenant Quotas Table (Epic 9)
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS tenant_quotas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL UNIQUE REFERENCES tenants(id),
+    max_storage_bytes BIGINT DEFAULT 0,
+    max_connections INT DEFAULT 0,
+    max_qps FLOAT DEFAULT 0,
+    max_children INT DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ===========================================================================
+-- Tenant Migrations Table (Epic 9)
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS tenant_migrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    from_isolation VARCHAR(20) NOT NULL,
+    to_isolation VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMP,
+    rollback_before TIMESTAMP,
+    error_message TEXT DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_migrations_tenant ON tenant_migrations(tenant_id);
 
 -- ===========================================================================
 -- Initial Audit Log Entry
